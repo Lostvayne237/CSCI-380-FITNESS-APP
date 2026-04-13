@@ -23,3 +23,4 @@ npm start
 ```
 
 Then open the project in the Expo dev tools and run on iOS, Android, or web as needed.
+# CSCI-380-FITNESS-APP
