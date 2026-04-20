@@ -22,12 +22,19 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
     setLoading(true);
-    await new Promise<void>(r => setTimeout(r, 800));
-    setSent(true);
-    setLoading(false);
+    setError(null);
+    try {
+      await new Promise<void>(r => setTimeout(r, 800));
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send reset email');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (sent) {
@@ -144,6 +151,20 @@ export function ForgotPasswordScreen({ navigation }: Props) {
                 color: colors.text,
               }}
             />
+            {error ? (
+              <View
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: '#fef2f2',
+                  borderWidth: 1,
+                  borderColor: '#fecaca',
+                }}
+              >
+                <Text style={{ color: colors.danger }}>{error}</Text>
+              </View>
+            ) : null}
             <Pressable
               onPress={submit}
               disabled={loading}

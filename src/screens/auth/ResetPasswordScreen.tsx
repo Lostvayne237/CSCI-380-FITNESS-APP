@@ -24,6 +24,7 @@ export function ResetPasswordScreen({ navigation }: Props) {
   const [show1, setShow1] = useState(false);
   const [show2, setShow2] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const reqs = useMemo(
     () => [
@@ -39,9 +40,15 @@ export function ResetPasswordScreen({ navigation }: Props) {
   const submit = async () => {
     if (!valid) return;
     setLoading(true);
-    await new Promise<void>(r => setTimeout(r, 800));
-    setLoading(false);
-    navigation.navigate('Login');
+    setError(null);
+    try {
+      await new Promise<void>(r => setTimeout(r, 800));
+      navigation.navigate('Login');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to reset password');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -140,6 +147,21 @@ export function ResetPasswordScreen({ navigation }: Props) {
             </View>
             {confirm.length > 0 && password !== confirm ? (
               <Text style={{ color: colors.danger, marginBottom: 8 }}>Passwords do not match</Text>
+            ) : null}
+            {error ? (
+              <View
+                style={{
+                  marginTop: 8,
+                  marginBottom: 8,
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: '#fef2f2',
+                  borderWidth: 1,
+                  borderColor: '#fecaca',
+                }}
+              >
+                <Text style={{ color: colors.danger }}>{error}</Text>
+              </View>
             ) : null}
 
             <Pressable

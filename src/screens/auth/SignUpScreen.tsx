@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
+import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
@@ -23,14 +24,25 @@ export function SignUpScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [role, setRole] = useState<'member' | 'trainer'>('member');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { signUp } = useAuth();
 
   const submit = async () => {
     setLoading(true);
-    await new Promise<void>(r => setTimeout(r, 800));
-    setLoading(false);
-    navigation.navigate('Login');
+    setError(null);
+    try {
+      if (!name.trim()) throw new Error('Please enter your name');
+      if (password !== confirm) throw new Error('Passwords do not match');
+      await signUp({ name: name.trim(), email: email.trim(), password, role });
+      navigation.navigate('Login');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sign up failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const field = (
@@ -92,7 +104,7 @@ export function SignUpScreen({ navigation }: Props) {
             >
               <Ionicons name="barbell" size={32} color="#fff" />
             </View>
-            <Text style={{ fontSize: 26, fontWeight: '800', color: colors.primary }}>Join FitPro</Text>
+            <Text style={{ fontSize: 26, fontWeight: '800', color: colors.primary }}>Join FitCheck</Text>
             <Text style={{ color: colors.textMuted, marginTop: 6 }}>Start your fitness journey</Text>
           </View>
 
@@ -105,9 +117,45 @@ export function SignUpScreen({ navigation }: Props) {
               borderColor: '#bfdbfe',
             }}
           >
+            <Text style={{ fontWeight: '600', marginBottom: 6, color: colors.text }}>I am signing up as</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+              {(['member', 'trainer'] as const).map(r => (
+                <Pressable
+                  key={r}
+                  onPress={() => setRole(r)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: role === r ? colors.primary : colors.border,
+                    backgroundColor: role === r ? '#eff6ff' : '#fff',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ fontWeight: '900', color: role === r ? colors.primary : colors.text }}>
+                    {r === 'member' ? 'Member' : 'Trainer'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             {field('Full name', name, setName)}
             {field('Email', email, setEmail)}
             {field('Password', password, setPassword, { secure: true })}
+            {error ? (
+              <View
+                style={{
+                  marginBottom: 14,
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: '#fef2f2',
+                  borderWidth: 1,
+                  borderColor: '#fecaca',
+                }}
+              >
+                <Text style={{ color: colors.danger }}>{error}</Text>
+              </View>
+            ) : null}
             <View style={{ marginBottom: 14 }}>
               <Text style={{ fontWeight: '600', marginBottom: 6, color: colors.text }}>
                 Confirm password
@@ -165,7 +213,7 @@ export function SignUpScreen({ navigation }: Props) {
               }}
             >
               <Text style={{ fontSize: 12, color: '#1e40af' }}>
-                Member accounts are for general users. Trainers and admins are created by administrators.
+                Trainer accounts can view assigned members and set nutrition goals. Admin accounts are not available here.
               </Text>
             </View>
           </View>

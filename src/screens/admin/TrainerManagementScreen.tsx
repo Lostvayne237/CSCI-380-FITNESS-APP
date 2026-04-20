@@ -21,8 +21,8 @@ type Trainer = {
 };
 
 const trainers: Trainer[] = [
-  { id: '1', name: 'Mike Johnson', email: 'mike@fitpro.com', status: 'approved', clients: 24, sessions: 187, revenue: 12450, joinDate: '2025-11-15' },
-  { id: '2', name: 'Alex Rodriguez', email: 'alex@fitpro.com', status: 'approved', clients: 18, sessions: 142, revenue: 9680, joinDate: '2025-12-03' },
+  { id: '1', name: 'Mike Johnson', email: 'mike@fitcheck.com', status: 'approved', clients: 24, sessions: 187, revenue: 12450, joinDate: '2025-11-15' },
+  { id: '2', name: 'Alex Rodriguez', email: 'alex@fitcheck.com', status: 'approved', clients: 18, sessions: 142, revenue: 9680, joinDate: '2025-12-03' },
   { id: '3', name: 'James Chen', email: 'james@email.com', status: 'pending', clients: 0, sessions: 0, revenue: 0, joinDate: '2026-04-08', notes: 'Certs submitted' },
   { id: '4', name: 'Tom Wilson', email: 'tom@email.com', status: 'suspended', clients: 8, sessions: 45, revenue: 3200, joinDate: '2026-02-14', notes: 'Under review' },
 ];

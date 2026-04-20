@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
   useCallback,
@@ -9,7 +8,10 @@ import {
   type ReactNode,
 } from 'react';
 import { CommonActions } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { navigationRef } from '../navigation/navigationRef';
+import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 export type UserRole = 'admin' | 'trainer' | 'member';
 
@@ -18,49 +20,24 @@ export interface User {
   email: string;
   role: UserRole;
   name: string;
-  status: 'active' | 'suspended' | 'pending';
 }
 
-const STORAGE_KEY = 'fitpro_user';
+const STORAGE_KEY = 'auth:user';
 
-const MOCK_USERS: Record<string, { password: string; user: User }> = {
-  'admin@fitpro.com': {
-    password: 'admin123',
-    user: {
-      id: '1',
-      email: 'admin@fitpro.com',
-      role: 'admin',
-      name: 'Sarah Admin',
-      status: 'active',
-    },
-  },
-  'trainer@fitpro.com': {
-    password: 'trainer123',
-    user: {
-      id: '2',
-      email: 'trainer@fitpro.com',
-      role: 'trainer',
-      name: 'Mike Johnson',
-      status: 'active',
-    },
-  },
-  'member@fitpro.com': {
-    password: 'member123',
-    user: {
-      id: '3',
-      email: 'member@fitpro.com',
-      role: 'member',
-      name: 'Alex Smith',
-      status: 'active',
-    },
-  },
-};
+type DemoAccount = { email: string; password: string; role: UserRole; name: string };
+
+const DEMO_ACCOUNTS: DemoAccount[] = [
+  { email: 'admin@fitcheck.com', password: 'admin123', role: 'admin', name: 'Admin' },
+  { email: 'trainer@fitcheck.com', password: 'trainer123', role: 'trainer', name: 'Trainer' },
+  { email: 'member@fitcheck.com', password: 'member123', role: 'member', name: 'Member' },
+];
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isHydrated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  signUp: (args: { name: string; email: string; password: string; role: Exclude<UserRole, 'admin'> }) => Promise<void>;
   logout: () => void;
   authError: string | null;
 }
@@ -73,40 +50,146 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) setUser(JSON.parse(raw));
+        if (!mounted) return;
+        if (!raw) {
+          setUser(null);
+          return;
+        }
+        setUser(JSON.parse(raw) as User);
       } finally {
-        setIsHydrated(true);
+        if (mounted) setIsHydrated(true);
       }
     })();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     setAuthError(null);
-    await new Promise<void>(resolve => setTimeout(resolve, 400));
+    const e = email.trim().toLowerCase();
 
-    const userData = MOCK_USERS[email.toLowerCase()];
-    if (!userData || userData.password !== password) {
-      setAuthError('Invalid email or password');
-      throw new Error('Invalid credentials');
-    }
-    if (userData.user.status === 'suspended') {
-      setAuthError('Account suspended. Contact support.');
-      throw new Error('Account suspended');
-    }
-    if (userData.user.status === 'pending') {
-      setAuthError('Account pending verification.');
-      throw new Error('Account pending');
+    // Always allow demo accounts, even when Supabase/API is configured.
+    const match = DEMO_ACCOUNTS.find(a => a.email === e && a.password === password);
+    if (match) {
+      try {
+        // If a Supabase session exists from a previous run, clear it so demo mode is unambiguous.
+        if (supabase) await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
+      const u: User = { id: match.email, email: match.email, role: match.role, name: match.name };
+      setUser(u);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+      return;
     }
 
-    setUser(userData.user);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userData.user));
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: e, password });
+        if (error) throw error;
+        const u = data.user;
+        if (!u?.id || !u.email) throw new Error('Login failed');
+        const name = String((u.user_metadata as any)?.name ?? u.email.split('@')[0] ?? 'User');
+        const role = String((u.user_metadata as any)?.role ?? 'member') as UserRole;
+        const user: User = { id: u.id, email: u.email, name, role };
+        setUser(user);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Login failed';
+        setAuthError(msg);
+        throw err instanceof Error ? err : new Error(msg);
+      }
+    }
+    if (api.hasBaseUrl()) {
+      try {
+        const { user } = await api.login({ email: e, password });
+        setUser(user);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Login failed';
+        setAuthError(msg);
+        throw err instanceof Error ? err : new Error(msg);
+      }
+    }
+
+    setAuthError('Invalid email or password');
+    throw new Error('Invalid email or password');
+  }, []);
+
+  const signUp = useCallback(async (args: { name: string; email: string; password: string; role: Exclude<UserRole, 'admin'> }) => {
+    setAuthError(null);
+    const name = args.name.trim();
+    const email = args.email.trim().toLowerCase();
+    if (!name) throw new Error('Please enter your name');
+    if (args.password.length < 6) throw new Error('Password must be at least 6 characters');
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: args.password,
+          options: { data: { name, role: args.role } },
+        });
+        if (error) throw error;
+        const u = data.user;
+        // If email confirmation is enabled, Supabase may not create a session yet.
+        if (u?.id && u.email) {
+          const user: User = { id: u.id, email: u.email, name, role: args.role };
+          setUser(user);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        }
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Sign up failed';
+        setAuthError(msg);
+        throw err instanceof Error ? err : new Error(msg);
+      }
+    }
+    if (api.hasBaseUrl()) {
+      try {
+        const res = await api.register({ name, email, password: args.password, role: args.role });
+        // Some APIs may not return a user until login; handle both.
+        if (res.user) {
+          setUser(res.user);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
+        }
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Sign up failed';
+        setAuthError(msg);
+        throw err instanceof Error ? err : new Error(msg);
+      }
+    }
+
+    const u: User = {
+      id: `local-${Date.now()}`,
+      email,
+      role: args.role,
+      name,
+    };
+    setUser(u);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
   }, []);
 
   const logout = useCallback(async () => {
     setUser(null);
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
+    }
+    await api.logout();
     await AsyncStorage.removeItem(STORAGE_KEY);
     if (navigationRef.isReady()) {
       navigationRef.dispatch(
@@ -121,10 +204,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isHydrated,
       login,
+      signUp,
       logout,
       authError,
     }),
-    [user, isHydrated, login, logout, authError],
+    [user, isHydrated, login, signUp, logout, authError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

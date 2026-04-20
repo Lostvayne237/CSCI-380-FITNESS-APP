@@ -8,7 +8,6 @@ import type { ClientsStackParamList } from '../../navigation/ClientsStack';
 import { colors } from '../../theme/colors';
 
 type Props = NativeStackScreenProps<ClientsStackParamList, 'ClientDetail'>;
-
 const progressData = [
   { week: 'W1', weight: 185, strength: 65 },
   { week: 'W2', weight: 183, strength: 68 },
@@ -129,7 +128,7 @@ export function ClientDetailScreen({ route, navigation }: Props) {
                 >
                   <Text style={{ fontSize: 20, fontWeight: '900', color: colors.text }}>{s.value}</Text>
                   <Text style={{ color: colors.textMuted, marginTop: 4 }}>{s.label}</Text>
-                  {s.sub ? <Text style={{ color: '#16a34a', marginTop: 4, fontWeight: '800' }}>{s.sub}</Text> : null}
+                  {'sub' in s && s.sub ? <Text style={{ color: '#16a34a', marginTop: 4, fontWeight: '800' }}>{s.sub}</Text> : null}
                 </View>
               ))}
             </View>

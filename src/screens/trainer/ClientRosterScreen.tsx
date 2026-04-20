@@ -8,6 +8,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { ClientsStackParamList } from '../../navigation/ClientsStack';
 import { colors } from '../../theme/colors';
 
+const filters = ['all', 'on-track', 'needs-attention', 'inactive'] as const;
+
 type Client = {
   id: string;
   name: string;
@@ -25,8 +27,6 @@ const clients: Client[] = [
   { id: '4', name: 'Michael Brown', avatar: 'M', goal: 'Weight Loss', status: 'needs-attention', lastActive: '2 days ago', progress: 45 },
   { id: '5', name: 'David Chen', avatar: 'D', goal: 'Strength Training', status: 'on-track', lastActive: 'Yesterday', progress: 88 },
 ];
-
-const filters = ['all', 'on-track', 'needs-attention', 'inactive'] as const;
 
 export function ClientRosterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ClientsStackParamList>>();

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Dashboard } from '../../components/member/Dashboard';
 import { MemberBottomNav, type MemberTabId } from '../../components/member/MemberBottomNav';
+import { Dashboard } from '../../components/member/Dashboard';
 import { ProfileTab } from '../../components/member/ProfileTab';
 import { ProgressTab } from '../../components/member/ProgressTab';
 import { WorkoutTracking } from '../../components/member/WorkoutTracking';

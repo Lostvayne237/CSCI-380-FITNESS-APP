@@ -39,9 +39,9 @@ export function LoginScreen({ navigation }: Props) {
 
   const fillDemo = (role: 'admin' | 'trainer' | 'member') => {
     const map = {
-      admin: { email: 'admin@fitpro.com', password: 'admin123' },
-      trainer: { email: 'trainer@fitpro.com', password: 'trainer123' },
-      member: { email: 'member@fitpro.com', password: 'member123' },
+      admin: { email: 'admin@fitcheck.com', password: 'admin123' },
+      trainer: { email: 'trainer@fitcheck.com', password: 'trainer123' },
+      member: { email: 'member@fitcheck.com', password: 'member123' },
     };
     setEmail(map[role].email);
     setPassword(map[role].password);
@@ -68,7 +68,7 @@ export function LoginScreen({ navigation }: Props) {
             >
               <Ionicons name="barbell" size={32} color="#fff" />
             </View>
-            <Text style={{ fontSize: 28, fontWeight: '800', color: colors.primary }}>FitPro</Text>
+            <Text style={{ fontSize: 28, fontWeight: '800', color: colors.primary }}>FitCheck</Text>
             <Text style={{ color: colors.textMuted, marginTop: 6 }}>Welcome back</Text>
           </View>
 
