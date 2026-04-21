@@ -1,19 +1,40 @@
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from '../../theme/colors';
 import { CircularProgressRing } from './CircularProgressRing';
 
-type Props = {
-  onQuickLog: () => void;
+export type FoodLogListItem = {
+  id: number;
+  foodName: string;
+  calories: number;
+  loggedAt: string;
 };
 
-export function Dashboard({ onQuickLog }: Props) {
+type Props = {
+  onQuickLog: () => void;
+  userName?: string;
+  caloriesToday?: number;
+  caloriesGoal?: number;
+  recentFood?: FoodLogListItem[];
+  loading?: boolean;
+  error?: string | null;
+};
+
+export function Dashboard({
+  onQuickLog,
+  userName,
+  caloriesToday = 0,
+  caloriesGoal = 2000,
+  recentFood = [],
+  loading = false,
+  error = null,
+}: Props) {
   const stats = {
     steps: 8234,
     stepsGoal: 10000,
-    calories: 547,
-    caloriesGoal: 650,
+    calories: caloriesToday,
+    caloriesGoal,
     activeMinutes: 42,
     activeGoal: 60,
   };
@@ -27,8 +48,13 @@ export function Dashboard({ onQuickLog }: Props) {
   return (
     <View style={{ gap: 24 }}>
       <View>
-        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>Welcome Back!</Text>
-        <Text style={{ color: colors.textMuted, marginTop: 4 }}>Keep up the great work today</Text>
+        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text }}>
+          {userName ? `Welcome back, ${userName}!` : 'Welcome back!'}
+        </Text>
+        <Text style={{ color: colors.textMuted, marginTop: 4 }}>
+          Calories today: <Text style={{ fontWeight: '800', color: colors.text }}>{caloriesToday}</Text> /{' '}
+          <Text style={{ fontWeight: '800', color: colors.text }}>{caloriesGoal}</Text>
+        </Text>
       </View>
 
       <View
@@ -43,6 +69,20 @@ export function Dashboard({ onQuickLog }: Props) {
         <Text style={{ marginBottom: 16, fontWeight: '600', color: colors.text }}>
           Today&apos;s Activity
         </Text>
+        {error ? (
+          <View
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: '#fef2f2',
+              borderWidth: 1,
+              borderColor: '#fecaca',
+            }}
+          >
+            <Text style={{ color: colors.danger }}>{error}</Text>
+          </View>
+        ) : null}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <CircularProgressRing
             value={stats.steps}
@@ -66,6 +106,11 @@ export function Dashboard({ onQuickLog }: Props) {
             icon={<Ionicons name="trending-up" size={18} color="#059669" />}
           />
         </View>
+        {loading ? (
+          <View style={{ marginTop: 12, alignItems: 'center' }}>
+            <ActivityIndicator />
+          </View>
+        ) : null}
       </View>
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -102,6 +147,70 @@ export function Dashboard({ onQuickLog }: Props) {
           <Ionicons name="flag" size={20} color={colors.text} />
           <Text style={{ fontWeight: '600', color: colors.text }}>Set Goal</Text>
         </Pressable>
+      </View>
+
+      <View>
+        <Text style={{ fontWeight: '600', marginBottom: 12, color: colors.text }}>
+          Recent Food Logs
+        </Text>
+        {recentFood.length === 0 ? (
+          <View
+            style={{
+              padding: 14,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+            }}
+          >
+            <Text style={{ color: colors.textMuted }}>
+              No food logs yet. Add a row in Supabase `food_logs` to see it here.
+            </Text>
+          </View>
+        ) : (
+          recentFood.map(item => (
+            <View
+              key={item.id}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: 14,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.border,
+                marginBottom: 8,
+                backgroundColor: colors.card,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: '#ffedd5',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="restaurant" size={20} color="#ea580c" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '600', color: colors.text }} numberOfLines={1}>
+                    {item.foodName}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textMuted }} numberOfLines={1}>
+                    {new Date(item.loggedAt).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontWeight: '700', color: colors.text }}>{item.calories} cal</Text>
+              </View>
+            </View>
+          ))
+        )}
       </View>
 
       <View>

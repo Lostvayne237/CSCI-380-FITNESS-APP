@@ -20,11 +20,10 @@ import { colors } from '../../theme/colors';
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
 export function SignUpScreen({ navigation }: Props) {
-  const [name, setName] = useState('');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [role, setRole] = useState<'member' | 'trainer'>('member');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +33,9 @@ export function SignUpScreen({ navigation }: Props) {
     setLoading(true);
     setError(null);
     try {
-      if (!name.trim()) throw new Error('Please enter your name');
+      if (!fullName.trim()) throw new Error('Please enter your name');
       if (password !== confirm) throw new Error('Passwords do not match');
-      await signUp({ name: name.trim(), email: email.trim(), password, role });
+      await signUp({ fullName: fullName.trim(), email: email.trim(), password });
       navigation.navigate('Login');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sign up failed');
@@ -117,29 +116,7 @@ export function SignUpScreen({ navigation }: Props) {
               borderColor: '#bfdbfe',
             }}
           >
-            <Text style={{ fontWeight: '600', marginBottom: 6, color: colors.text }}>I am signing up as</Text>
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
-              {(['member', 'trainer'] as const).map(r => (
-                <Pressable
-                  key={r}
-                  onPress={() => setRole(r)}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 10,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: role === r ? colors.primary : colors.border,
-                    backgroundColor: role === r ? '#eff6ff' : '#fff',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ fontWeight: '900', color: role === r ? colors.primary : colors.text }}>
-                    {r === 'member' ? 'Member' : 'Trainer'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            {field('Full name', name, setName)}
+            {field('Full name', fullName, setFullName)}
             {field('Email', email, setEmail)}
             {field('Password', password, setPassword, { secure: true })}
             {error ? (
@@ -213,7 +190,7 @@ export function SignUpScreen({ navigation }: Props) {
               }}
             >
               <Text style={{ fontSize: 12, color: '#1e40af' }}>
-                Trainer accounts can view assigned members and set nutrition goals. Admin accounts are not available here.
+                New accounts default to the Member role. An admin can promote accounts to Trainer/Admin.
               </Text>
             </View>
           </View>

@@ -27,10 +27,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "API_BASE_URL": "",
-      "SUPABASE_URL": "https://twtnxvieckcpyfifvvei.supabase.co",
-      "SUPABASE_ANON_KEY": "sb_publishable_WLndD33wjxDu9ZwHdWgGaQ_67LObrOg"
-    }
+    "extra": {}
   }
 }

@@ -37,16 +37,6 @@ export function LoginScreen({ navigation }: Props) {
     }
   };
 
-  const fillDemo = (role: 'admin' | 'trainer' | 'member') => {
-    const map = {
-      admin: { email: 'admin@fitcheck.com', password: 'admin123' },
-      trainer: { email: 'trainer@fitcheck.com', password: 'trainer123' },
-      member: { email: 'member@fitcheck.com', password: 'member123' },
-    };
-    setEmail(map[role].email);
-    setPassword(map[role].password);
-  };
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f9ff' }}>
       <KeyboardAvoidingView
@@ -172,50 +162,6 @@ export function LoginScreen({ navigation }: Props) {
                 <Text style={{ color: colors.primary, fontWeight: '700' }}>Sign up</Text>
               </Text>
             </Pressable>
-
-            <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border }}>
-              <Text style={{ textAlign: 'center', fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
-                Demo accounts
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Pressable
-                  onPress={() => fillDemo('admin')}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 10,
-                    borderRadius: 10,
-                    backgroundColor: '#f3e8ff',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#6b21a8', fontWeight: '600', fontSize: 12 }}>Admin</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => fillDemo('trainer')}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 10,
-                    borderRadius: 10,
-                    backgroundColor: '#dbeafe',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#1d4ed8', fontWeight: '600', fontSize: 12 }}>Trainer</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => fillDemo('member')}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 10,
-                    borderRadius: 10,
-                    backgroundColor: '#dcfce7',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#166534', fontWeight: '600', fontSize: 12 }}>Member</Text>
-                </Pressable>
-              </View>
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

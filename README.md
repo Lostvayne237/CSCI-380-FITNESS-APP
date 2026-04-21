@@ -7,7 +7,7 @@
 - **Members**: log food (manual + photo→AI), see daily calories vs goal, weekly history, edit profile (age/weight/height/activity/goal).
 - **Trainers**: view assigned members, view member food logs + calorie trends, set a per-member daily calorie goal + note (auto-suggested via BMR/TDEE).
 
-The app uses **Supabase Auth** for real registration/login (set `SUPABASE_URL` + `SUPABASE_ANON_KEY` in `app.json`).
+This app uses **Supabase Auth** + a `profiles` table for **role-based access control (RBAC)**.
 
 ### Tech stack
 
@@ -25,78 +25,21 @@ Then open the project in the Expo dev tools and run on iOS, Android, or web as n
 
 ### Backend
 
-The app supports:
+#### Supabase setup
 
-- **Supabase (recommended)**: set `app.json` → `expo.extra.SUPABASE_URL` and `SUPABASE_ANON_KEY`
-- **Optional Express server (AI calories)**: run `server/` and point `API_BASE_URL` at it if you want the `/ai/*` endpoints
-
-#### Configure Supabase
-
-In `app.json`:
-
-```json
-{
-  "expo": {
-    "extra": {
-      "SUPABASE_URL": "https://<your-ref>.supabase.co",
-      "SUPABASE_ANON_KEY": "sb_publishable_...",
-      "API_BASE_URL": ""
-    }
-  }
-}
-```
-
-#### Run the backend locally (Express)
+- Create a Supabase project
+- Add credentials to `.env.local`:
 
 ```bash
-cd server
-npm install
-npm run dev
+NEXT_PUBLIC_SUPABASE_URL="https://<your-project-ref>.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_..."
 ```
 
-By default it listens on port `8787`.
+- In Supabase SQL Editor, create `profiles` + trigger + RLS (see the SQL shared in chat).
 
-Test it:
+#### Roles
 
-```bash
-curl http://localhost:8787/health
-```
-
-#### Connect a teammate (same Wi‑Fi / local network)
-
-If your teammate is running the app on a phone, they **cannot** use `localhost` to reach your machine.
-
-On macOS, get your LAN IP:
-
-```bash
-ipconfig getifaddr en0
-```
-
-Then set `API_BASE_URL` in `app.json`:
-
-```json
-{
-  "expo": {
-    "extra": {
-      "API_BASE_URL": "http://192.168.x.x:8787"
-    }
-  }
-}
-```
-
-Your teammate can hit:
-
-- `GET /health` → `http://192.168.x.x:8787/health`
-
-#### Connect a remote teammate (ngrok)
-
-Start the backend (`npm run dev` in `server/`), then in another terminal:
-
-```bash
-ngrok http 8787
-```
-
-ngrok will print a public URL like `https://abc123.ngrok-free.app`. Set:
-
-- `API_BASE_URL` = `https://abc123.ngrok-free.app`
-
+Roles are stored in `public.profiles.role`:
+- `member`
+- `trainer`
+- `admin`
