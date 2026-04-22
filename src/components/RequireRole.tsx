@@ -11,7 +11,8 @@ type Props = {
 };
 
 export function RequireRole({ allow, children }: Props) {
-  const { user, isHydrated, loading } = useAuth();
+  const { user, profile, isHydrated, loading } = useAuth();
+  const effectiveRole = profile?.role ?? user?.role ?? null;
 
   if (!isHydrated || loading) {
     return (
@@ -22,7 +23,7 @@ export function RequireRole({ allow, children }: Props) {
   }
 
   if (!user) return <AuthNavigator />;
-  if (!allow.includes(user.role)) return <UnauthorizedScreen />;
+  if (!effectiveRole || !allow.includes(effectiveRole)) return <UnauthorizedScreen />;
   return <>{children}</>;
 }
 

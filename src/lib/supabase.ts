@@ -7,7 +7,7 @@ function getExtra(): Record<string, any> {
   return (cfg as any)?.extra ?? {};
 }
 
-const url =
+export const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   String(getExtra().SUPABASE_URL || '');
 
@@ -16,7 +16,7 @@ const anonKey =
   String(getExtra().SUPABASE_ANON_KEY || '');
 
 // NOTE: rotate keys before production if you ever hardcode them during setup.
-export const supabase = createClient(url, anonKey, {
+export const supabase = createClient(SUPABASE_URL, anonKey, {
   auth: {
     storage: AsyncStorage,
     persistSession: true,

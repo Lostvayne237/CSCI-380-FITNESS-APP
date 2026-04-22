@@ -3,10 +3,11 @@ import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../../context/AuthContext';
+import { SUPABASE_URL } from '../../lib/supabase';
 import { colors } from '../../theme/colors';
 
 export function ProfileTab() {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const [dark, setDark] = useState(false);
 
   const achievements = [
@@ -55,6 +56,13 @@ export function ProfileTab() {
           {user?.name ?? 'Member'}
         </Text>
         <Text style={{ color: colors.textMuted }}>Fitness enthusiast</Text>
+        <Text style={{ color: colors.textMuted, marginTop: 6, fontSize: 12 }}>
+          Role (profile): <Text style={{ fontWeight: '800', color: colors.text }}>{profile?.role ?? '—'}</Text>
+          {'  '}Role (fallback): <Text style={{ fontWeight: '800', color: colors.text }}>{user?.role ?? '—'}</Text>
+        </Text>
+        <Text style={{ color: colors.textMuted, marginTop: 4, fontSize: 10 }} numberOfLines={1}>
+          Supabase: {SUPABASE_URL}
+        </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
           <Ionicons name="ribbon" size={18} color="#ca8a04" />
           <Text style={{ color: '#a16207', fontWeight: '600' }}>Level 12</Text>

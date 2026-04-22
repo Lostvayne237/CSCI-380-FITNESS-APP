@@ -37,6 +37,19 @@ export function LoginScreen({ navigation }: Props) {
     }
   };
 
+  const loginAsDevAdmin = async () => {
+    setEmail('admin@fake.local');
+    setPassword('admin');
+    setLoading(true);
+    try {
+      await login('admin@fake.local', 'admin');
+    } catch {
+      /* handled */
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f0f9ff' }}>
       <KeyboardAvoidingView
@@ -155,6 +168,23 @@ export function LoginScreen({ navigation }: Props) {
                 <Text style={{ color: '#fff', fontWeight: '700' }}>Sign in</Text>
               )}
             </Pressable>
+
+            {__DEV__ ? (
+              <Pressable
+                onPress={loginAsDevAdmin}
+                disabled={loading}
+                style={{
+                  marginTop: 10,
+                  borderRadius: 14,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  backgroundColor: '#0f172a',
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Login as Admin (dev)</Text>
+              </Pressable>
+            ) : null}
 
             <Pressable onPress={() => navigation.navigate('SignUp')} style={{ marginTop: 16 }}>
               <Text style={{ textAlign: 'center', color: colors.textMuted }}>

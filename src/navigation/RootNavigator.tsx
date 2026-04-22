@@ -10,9 +10,9 @@ import { TrainerNavigator } from './TrainerNavigator';
 const Stack = createNativeStackNavigator();
 
 export function RootNavigator() {
-  const { user, isHydrated } = useAuth();
+  const { user, profile, isHydrated, loading } = useAuth();
 
-  if (!isHydrated) {
+  if (!isHydrated || loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
@@ -20,15 +20,16 @@ export function RootNavigator() {
     );
   }
 
-  const stackKey = user ? `app-${user.role}-${user.id}` : 'auth';
+  const effectiveRole = profile?.role ?? user?.role ?? null;
+  const stackKey = user && effectiveRole ? `app-${effectiveRole}-${user.id}` : 'auth';
 
   return (
     <Stack.Navigator key={stackKey} screenOptions={{ headerShown: false }}>
       {!user ? (
         <Stack.Screen name="Auth" component={AuthNavigator} />
-      ) : user.role === 'member' ? (
+      ) : effectiveRole === 'member' ? (
         <Stack.Screen name="Member" component={MemberNavigator} />
-      ) : user.role === 'trainer' ? (
+      ) : effectiveRole === 'trainer' ? (
         <Stack.Screen name="Trainer" component={TrainerNavigator} />
       ) : (
         <Stack.Screen name="Admin" component={AdminNavigator} />
