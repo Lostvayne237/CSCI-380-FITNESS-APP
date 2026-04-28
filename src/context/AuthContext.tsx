@@ -35,6 +35,16 @@ const DEV_FAKE_ADMIN_EMAIL = 'admin@fake.local';
 const DEV_FAKE_ADMIN_PASSWORD = 'admin';
 const DEV_FAKE_ADMIN_ID = 'dev-admin';
 
+const DEV_FAKE_MEMBER_EMAIL = 'member@demo.local';
+const DEV_FAKE_MEMBER_PASSWORD = 'demo';
+const DEV_FAKE_MEMBER_ID = 'dev-member';
+
+const DEV_FAKE_TRAINER_EMAIL = 'trainer@demo.local';
+const DEV_FAKE_TRAINER_PASSWORD = 'demo';
+const DEV_FAKE_TRAINER_ID = 'dev-trainer';
+
+const DEV_FAKE_USER_IDS = new Set([DEV_FAKE_ADMIN_ID, DEV_FAKE_MEMBER_ID, DEV_FAKE_TRAINER_ID]);
+
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
@@ -65,7 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isHydrated, setIsHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const isDevFakeUser = useCallback((u: User | null) => u?.id === DEV_FAKE_ADMIN_ID, []);
+  const isDevFakeUser = useCallback(
+    (u: User | null) => (u ? DEV_FAKE_USER_IDS.has(u.id) : false),
+    [],
+  );
 
   const loadSupabaseUserAndProfile = useCallback(async () => {
     // `getSession()` can be stale right after sign-in; `getUser()` is authoritative.
@@ -127,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    // Dev-only fake admin session is local; don't let Supabase overwrite it.
+    // Dev-only fake demo session is local; don't let Supabase overwrite it.
     if (isDevFakeUser(user)) return;
     try {
       setLoading(true);
@@ -190,7 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       try {
-        // Dev-only fake admin session is local; ignore Supabase auth events.
+        // Dev-only fake demo session is local; ignore Supabase auth events.
         if (isDevFakeUser(user)) return;
         setLoading(true);
         const u = await loadSupabaseUserAndProfile();
@@ -213,7 +226,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
 
-      // Dev convenience: local fake admin login (bypasses Supabase).
+      // Dev convenience: local fake demo logins (bypass Supabase).
+      if (__DEV__ && e === DEV_FAKE_MEMBER_EMAIL && password === DEV_FAKE_MEMBER_PASSWORD) {
+        const fake: User = {
+          id: DEV_FAKE_MEMBER_ID,
+          email: DEV_FAKE_MEMBER_EMAIL,
+          name: 'Demo Member',
+          role: 'member',
+        };
+        setProfile({
+          id: fake.id,
+          email: fake.email,
+          full_name: fake.name,
+          role: fake.role,
+          created_at: null,
+        });
+        setUser(fake);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fake));
+        return;
+      }
+      if (__DEV__ && e === DEV_FAKE_TRAINER_EMAIL && password === DEV_FAKE_TRAINER_PASSWORD) {
+        const fake: User = {
+          id: DEV_FAKE_TRAINER_ID,
+          email: DEV_FAKE_TRAINER_EMAIL,
+          name: 'Demo Trainer',
+          role: 'trainer',
+        };
+        setProfile({
+          id: fake.id,
+          email: fake.email,
+          full_name: fake.name,
+          role: fake.role,
+          created_at: null,
+        });
+        setUser(fake);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fake));
+        return;
+      }
       if (__DEV__ && e === DEV_FAKE_ADMIN_EMAIL && password === DEV_FAKE_ADMIN_PASSWORD) {
         const fake: User = {
           id: DEV_FAKE_ADMIN_ID,

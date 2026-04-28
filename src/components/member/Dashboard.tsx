@@ -1,8 +1,32 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { CircularProgressRing } from './CircularProgressRing';
+
+export type WorkoutType = 'strength' | 'cardio' | 'yoga' | 'custom';
+
+export type Workout = {
+  id: string;
+  type: WorkoutType;
+  date: string;
+  duration: number;
+  details: Record<string, any>;
+  summary: string;
+};
+
+export type DailyActivity = {
+  date: string;
+  totalWorkouts: number;
+  totalDuration: number;
+  caloriesBurned: number;
+};
+
+export type DailyTracker = {
+  date: string;
+  caloriesConsumed: number;
+  steps: number;
+};
 
 export type FoodLogListItem = {
   id: number;
@@ -13,37 +37,45 @@ export type FoodLogListItem = {
 
 type Props = {
   onQuickLog: () => void;
+  onOpenDailyTracker: () => void;
   userName?: string;
   caloriesToday?: number;
   caloriesGoal?: number;
   recentFood?: FoodLogListItem[];
   loading?: boolean;
   error?: string | null;
+  workouts: Workout[];
+  onSelectWorkout: (id: string) => void;
+  dailyActivity: DailyActivity;
+  dailyTracker: DailyTracker;
+  onUpdateDailyTracker: (patch: Partial<Pick<DailyTracker, 'caloriesConsumed' | 'steps'>>) => void;
 };
 
 export function Dashboard({
   onQuickLog,
+  onOpenDailyTracker,
   userName,
   caloriesToday = 0,
   caloriesGoal = 2000,
   recentFood = [],
   loading = false,
   error = null,
+  workouts,
+  onSelectWorkout,
+  dailyActivity,
+  dailyTracker,
+  onUpdateDailyTracker,
 }: Props) {
+  const { colors } = useTheme();
   const stats = {
-    steps: 8234,
+    steps: dailyTracker.steps,
     stepsGoal: 10000,
     calories: caloriesToday,
     caloriesGoal,
-    activeMinutes: 42,
+    activeMinutes: dailyActivity.totalDuration,
     activeGoal: 60,
   };
-
-  const recentWorkouts = [
-    { name: 'Morning Run', duration: '25 min', calories: 245, time: '7:30 AM' },
-    { name: 'Upper Body', duration: '40 min', calories: 320, time: 'Yesterday' },
-    { name: 'Yoga', duration: '30 min', calories: 150, time: '2 days ago' },
-  ];
+  const recentWorkouts = workouts.slice(0, 8);
 
   return (
     <View style={{ gap: 24 }}>
@@ -68,6 +100,11 @@ export function Dashboard({
       >
         <Text style={{ marginBottom: 16, fontWeight: '600', color: colors.text }}>
           Today&apos;s Activity
+        </Text>
+        <Text style={{ color: colors.textMuted, marginBottom: 12 }}>
+          Workouts: <Text style={{ fontWeight: '900', color: colors.text }}>{dailyActivity.totalWorkouts}</Text>
+          {'  '}•{'  '}Duration:{' '}
+          <Text style={{ fontWeight: '900', color: colors.text }}>{dailyActivity.totalDuration} min</Text>
         </Text>
         {error ? (
           <View
@@ -131,6 +168,7 @@ export function Dashboard({
           <Text style={{ color: '#fff', fontWeight: '600' }}>Log Workout</Text>
         </Pressable>
         <Pressable
+          onPress={onOpenDailyTracker}
           style={{
             flex: 1,
             borderRadius: 14,
@@ -144,8 +182,8 @@ export function Dashboard({
             backgroundColor: colors.card,
           }}
         >
-          <Ionicons name="flag" size={20} color={colors.text} />
-          <Text style={{ fontWeight: '600', color: colors.text }}>Set Goal</Text>
+          <Ionicons name="checkbox" size={20} color={colors.text} />
+          <Text style={{ fontWeight: '600', color: colors.text }}>Daily Tracker</Text>
         </Pressable>
       </View>
 
@@ -217,45 +255,89 @@ export function Dashboard({
         <Text style={{ fontWeight: '600', marginBottom: 12, color: colors.text }}>
           Recent Workouts
         </Text>
-        {recentWorkouts.map((w, idx) => (
+        {recentWorkouts.length === 0 ? (
           <View
-            key={idx}
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
               padding: 14,
               borderRadius: 12,
               borderWidth: 1,
               borderColor: colors.border,
-              marginBottom: 8,
               backgroundColor: colors.card,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
-                  backgroundColor: '#dbeafe',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="barbell" size={20} color={colors.primary} />
-              </View>
-              <View>
-                <Text style={{ fontWeight: '600', color: colors.text }}>{w.name}</Text>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>{w.time}</Text>
-              </View>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ fontWeight: '600', color: colors.text }}>{w.duration}</Text>
-              <Text style={{ fontSize: 12, color: colors.textMuted }}>{w.calories} cal</Text>
-            </View>
+            <Text style={{ color: colors.textMuted }}>No workouts logged yet.</Text>
           </View>
-        ))}
+        ) : (
+          recentWorkouts.map((w, idx) => {
+            const isMostRecent = idx === 0;
+            const when = new Date(w.date).toLocaleString();
+            const icon =
+              w.type === 'strength'
+                ? ('barbell' as const)
+                : w.type === 'cardio'
+                  ? ('timer' as const)
+                  : w.type === 'yoga'
+                    ? ('leaf' as const)
+                    : ('flash' as const);
+            const tint =
+              w.type === 'strength'
+                ? '#7c3aed'
+                : w.type === 'cardio'
+                  ? '#2563eb'
+                  : w.type === 'yoga'
+                    ? '#059669'
+                    : '#ea580c';
+
+            return (
+              <Pressable
+                key={w.id}
+                onPress={() => onSelectWorkout(w.id)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: 14,
+                  borderRadius: 12,
+                  borderWidth: 2,
+                  borderColor: isMostRecent ? tint : colors.border,
+                  marginBottom: 8,
+                  backgroundColor: isMostRecent ? tint + '12' : colors.card,
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      backgroundColor: tint + '22',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name={icon} size={20} color={tint} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '800', color: colors.text }} numberOfLines={1}>
+                      {w.type.toUpperCase()}
+                      {isMostRecent ? ' • Latest' : ''}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted }} numberOfLines={1}>
+                      {w.summary}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>
+                      {when}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontWeight: '800', color: colors.text }}>{w.duration} min</Text>
+                </View>
+              </Pressable>
+            );
+          })
+        )}
       </View>
     </View>
   );

@@ -1,36 +1,87 @@
-import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { LayoutAnimation, Platform, Pressable, Text, UIManager, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from '../../theme/colors';
+import { CardioForm, CustomForm, FormCard, StrengthForm, YogaForm } from './WorkoutForms';
 
 type Props = {
   onClose: () => void;
   embedded?: boolean;
+  onLogWorkout?: (workout: {
+    id: string;
+    type: 'strength' | 'cardio' | 'yoga' | 'custom';
+    date: string;
+    duration: number;
+    details: Record<string, any>;
+    summary: string;
+  }) => void;
 };
 
 const types = [
-  { name: 'Strength Training', icon: 'barbell' as const, tone: '#7c3aed' },
-  { name: 'Cardio', icon: 'timer' as const, tone: '#2563eb' },
-  { name: 'Yoga', icon: 'leaf' as const, tone: '#059669' },
-  { name: 'Custom', icon: 'flash' as const, tone: '#ea580c' },
-];
+  { key: 'strength', name: 'Strength Training', icon: 'barbell' as const, tone: '#7c3aed' },
+  { key: 'cardio', name: 'Cardio', icon: 'timer' as const, tone: '#2563eb' },
+  { key: 'yoga', name: 'Yoga', icon: 'leaf' as const, tone: '#059669' },
+  { key: 'custom', name: 'Custom', icon: 'flash' as const, tone: '#ea580c' },
+] as const;
 
-export function WorkoutTracking({ onClose, embedded }: Props) {
-  const [selectedType, setSelectedType] = useState<string | null>(embedded ? types[0].name : null);
-  const [isTracking, setIsTracking] = useState(false);
-  const [duration, setDuration] = useState(0);
+export function WorkoutTracking({ onClose, embedded, onLogWorkout }: Props) {
+  type WorkoutKey = (typeof types)[number]['key'];
+
+  const [selectedWorkout, setSelectedWorkout] = useState<WorkoutKey | null>(embedded ? 'strength' : null);
 
   useEffect(() => {
-    if (!isTracking) return;
-    const id = setInterval(() => setDuration(d => d + 1), 1000);
-    return () => clearInterval(id);
-  }, [isTracking]);
+    if (Platform.OS === 'android') {
+      UIManager.setLayoutAnimationEnabledExperimental?.(true);
+    }
+  }, []);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const selectedMeta = useMemo(
+    () => (selectedWorkout ? types.find(t => t.key === selectedWorkout) ?? null : null),
+    [selectedWorkout],
+  );
+
+  const select = (key: WorkoutKey) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedWorkout(key);
+  };
+
+  const reset = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedWorkout(null);
+  };
+
+  const submit = (payload: Record<string, any>) => {
+    const type = String(payload?.type ?? selectedWorkout ?? 'custom') as
+      | 'strength'
+      | 'cardio'
+      | 'yoga'
+      | 'custom';
+
+    const duration = Number(payload?.durationMinutes ?? payload?.duration ?? 0);
+    const date = new Date().toISOString();
+
+    const summary =
+      type === 'strength'
+        ? `${payload.exerciseName || 'Strength'} - ${Number(payload.sets ?? 0)} sets`
+        : type === 'cardio'
+          ? `${payload.activityType || 'Cardio'} - ${Number(payload.distance ?? 0)} mi`
+          : type === 'yoga'
+            ? `${payload.sessionType || 'Yoga'} - ${duration} min`
+            : `${payload.workoutName || 'Custom'} - ${duration} min`;
+
+    const workout = {
+      id: `${Date.now()}`,
+      type,
+      date,
+      duration,
+      details: payload,
+      summary,
+    };
+
+    console.log('workout:submit', workout);
+    onLogWorkout?.(workout);
+    onClose();
   };
 
   return (
@@ -44,112 +95,68 @@ export function WorkoutTracking({ onClose, embedded }: Props) {
         )}
       </View>
 
-      {!selectedType ? (
-        <View>
-          <Text style={{ marginBottom: 12, fontWeight: '600', color: colors.text }}>
-            Select Workout Type
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-            {types.map(t => (
+      <View>
+        <Text style={{ marginBottom: 12, fontWeight: '600', color: colors.text }}>
+          Select Workout Type
+        </Text>
+
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+          {types.map(t => {
+            const selected = selectedWorkout === t.key;
+            return (
               <Pressable
-                key={t.name}
-                onPress={() => setSelectedType(t.name)}
-                style={{
+                key={t.key}
+                onPress={() => select(t.key)}
+                style={({ pressed }) => ({
                   width: '47%',
                   borderRadius: 14,
                   padding: 16,
-                  borderWidth: 1,
-                  borderColor: colors.border,
+                  borderWidth: 2,
+                  borderColor: selected ? t.tone : colors.border,
                   alignItems: 'center',
                   gap: 8,
-                  backgroundColor: colors.card,
-                }}
+                  backgroundColor: selected ? t.tone + '18' : colors.card,
+                  transform: [{ scale: pressed ? 0.98 : 1 }],
+                })}
               >
                 <View
                   style={{
                     width: 52,
                     height: 52,
                     borderRadius: 26,
-                    backgroundColor: t.tone + '22',
+                    backgroundColor: selected ? t.tone + '33' : t.tone + '22',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
                   <Ionicons name={t.icon} size={26} color={t.tone} />
                 </View>
-                <Text style={{ textAlign: 'center', color: colors.text, fontWeight: '500' }}>{t.name}</Text>
+                <Text style={{ textAlign: 'center', color: colors.text, fontWeight: '700' }}>{t.name}</Text>
               </Pressable>
-            ))}
-          </View>
+            );
+          })}
         </View>
-      ) : (
-        <View style={{ gap: 16 }}>
-          <View
-            style={{
-              borderRadius: 16,
-              padding: 24,
-              alignItems: 'center',
-              backgroundColor: '#eff6ff',
-              borderWidth: 1,
-              borderColor: '#bfdbfe',
-            }}
-          >
-            <Text style={{ color: colors.textMuted, marginBottom: 8 }}>{selectedType}</Text>
-            <Text style={{ fontSize: 44, fontWeight: '800', color: colors.text }}>
-              {formatTime(duration)}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <Ionicons name="flame" size={18} color="#ea580c" />
-              <Text style={{ color: colors.textMuted }}>{Math.floor(duration * 5)} cal</Text>
-            </View>
-          </View>
+      </View>
 
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Pressable
-              onPress={() => setIsTracking(v => !v)}
-              style={{
-                flex: 1,
-                borderRadius: 14,
-                paddingVertical: 14,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-                backgroundColor: colors.primary,
-              }}
-            >
-              <Ionicons name={isTracking ? 'pause' : 'play'} size={20} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '700' }}>{isTracking ? 'Pause' : 'Start'}</Text>
-            </Pressable>
-            <Pressable
-              onPress={onClose}
-              style={{
-                flex: 1,
-                borderRadius: 14,
-                paddingVertical: 14,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-                backgroundColor: colors.accent,
-              }}
-            >
-              <Ionicons name="checkmark" size={20} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '700' }}>Complete</Text>
-            </Pressable>
-          </View>
+      {selectedWorkout ? (
+        <View style={{ gap: 12 }}>
+          <FormCard title={selectedMeta?.name ?? 'Workout'} subtitle="Fill out the form below (MVP)">
+            {selectedWorkout === 'strength' ? (
+              <StrengthForm onSubmit={submit} />
+            ) : selectedWorkout === 'cardio' ? (
+              <CardioForm onSubmit={submit} />
+            ) : selectedWorkout === 'yoga' ? (
+              <YogaForm onSubmit={submit} />
+            ) : (
+              <CustomForm onSubmit={submit} />
+            )}
+          </FormCard>
 
-          <Pressable
-            onPress={() => {
-              setSelectedType(null);
-              setIsTracking(false);
-              setDuration(0);
-            }}
-          >
+          <Pressable onPress={reset} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
             <Text style={{ textAlign: 'center', color: colors.textMuted }}>Change Workout Type</Text>
           </Pressable>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }

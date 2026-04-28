@@ -37,12 +37,12 @@ export function LoginScreen({ navigation }: Props) {
     }
   };
 
-  const loginAsDevAdmin = async () => {
-    setEmail('admin@fake.local');
-    setPassword('admin');
+  const loginAsDevDemo = async (email: string, password: string) => {
+    setEmail(email);
+    setPassword(password);
     setLoading(true);
     try {
-      await login('admin@fake.local', 'admin');
+      await login(email, password);
     } catch {
       /* handled */
     } finally {
@@ -170,20 +170,52 @@ export function LoginScreen({ navigation }: Props) {
             </Pressable>
 
             {__DEV__ ? (
-              <Pressable
-                onPress={loginAsDevAdmin}
-                disabled={loading}
-                style={{
-                  marginTop: 10,
-                  borderRadius: 14,
-                  paddingVertical: 12,
-                  alignItems: 'center',
-                  backgroundColor: '#0f172a',
-                  opacity: loading ? 0.7 : 1,
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700' }}>Login as Admin (dev)</Text>
-              </Pressable>
+              <>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <Pressable
+                    onPress={() => loginAsDevDemo('member@demo.local', 'demo')}
+                    disabled={loading}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      borderRadius: 14,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      backgroundColor: '#15803d',
+                      opacity: loading ? 0.7 : pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Member (dev)</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => loginAsDevDemo('trainer@demo.local', 'demo')}
+                    disabled={loading}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      borderRadius: 14,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      backgroundColor: '#b45309',
+                      opacity: loading ? 0.7 : pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Trainer (dev)</Text>
+                  </Pressable>
+                </View>
+                <Pressable
+                  onPress={() => loginAsDevDemo('admin@fake.local', 'admin')}
+                  disabled={loading}
+                  style={({ pressed }) => ({
+                    marginTop: 10,
+                    borderRadius: 14,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    backgroundColor: '#0f172a',
+                    opacity: loading ? 0.7 : pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Admin (dev)</Text>
+                </Pressable>
+              </>
             ) : null}
 
             <Pressable onPress={() => navigation.navigate('SignUp')} style={{ marginTop: 16 }}>

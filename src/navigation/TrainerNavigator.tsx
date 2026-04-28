@@ -5,6 +5,7 @@ import { ClientsStack } from './ClientsStack';
 import { SessionSchedulerScreen } from '../screens/trainer/SessionSchedulerScreen';
 import { TrainerHomeScreen } from '../screens/trainer/TrainerHomeScreen';
 import { TrainerMessagingScreen } from '../screens/trainer/TrainerMessagingScreen';
+import { UsersScreen } from '../screens/trainer/UsersScreen';
 import { WorkoutBuilderScreen } from '../screens/trainer/WorkoutBuilderScreen';
 import { RequireRole } from '../components/RequireRole';
 import { colors } from '../theme/colors';
@@ -40,6 +41,14 @@ export function TrainerNavigator() {
             title: 'Clients',
             headerShown: false,
             tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} />,
+          }}
+        />
+        <Tab.Screen
+          name="Users"
+          component={UsersScreen}
+          options={{
+            title: 'Users',
+            tabBarIcon: ({ color, size }) => <Ionicons name="person" color={color} size={size} />,
           }}
         />
         <Tab.Screen

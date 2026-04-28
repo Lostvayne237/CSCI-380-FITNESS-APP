@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../context/ThemeContext';
 
 export type MemberTabId = 'home' | 'workouts' | 'progress' | 'profile';
 
@@ -18,6 +18,7 @@ const tabs: { id: MemberTabId; label: string; icon: keyof typeof Ionicons.glyphM
 ];
 
 export function MemberBottomNav({ active, onChange }: Props) {
+  const { colors } = useTheme();
   return (
     <View
       style={{
