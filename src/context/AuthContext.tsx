@@ -31,6 +31,7 @@ export type Profile = {
 };
 
 const STORAGE_KEY = 'auth:user';
+const ADMIN_DIRECTORY_KEY = 'adminDirectory:v1';
 const DEV_FAKE_ADMIN_EMAIL = 'admin@fake.local';
 const DEV_FAKE_ADMIN_PASSWORD = 'admin';
 const DEV_FAKE_ADMIN_ID = 'dev-admin';
@@ -246,6 +247,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (__DEV__ && e === DEV_FAKE_TRAINER_EMAIL && password === DEV_FAKE_TRAINER_PASSWORD) {
+        try {
+          const raw = await AsyncStorage.getItem(ADMIN_DIRECTORY_KEY);
+          const parsed = raw ? (JSON.parse(raw) as any) : null;
+          const active = parsed?.people?.[DEV_FAKE_TRAINER_ID]?.active;
+          if (active === false) {
+            setAuthError('This trainer account is inactive.');
+            return;
+          }
+        } catch {
+          // ignore
+        }
         const fake: User = {
           id: DEV_FAKE_TRAINER_ID,
           email: DEV_FAKE_TRAINER_EMAIL,

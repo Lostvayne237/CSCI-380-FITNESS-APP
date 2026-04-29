@@ -3,66 +3,57 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { ChangeRoleModal } from '../../components/admin/ChangeRoleModal';
+import { RoleBadge } from '../../components/admin/RoleBadge';
 import { ScreenHeader } from '../../components/ScreenHeader';
+import { useAdminDirectory } from '../../context/AdminDirectoryContext';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { colors } from '../../theme/colors';
 
-type Role = 'admin' | 'trainer' | 'member';
-type Status = 'active' | 'suspended' | 'pending';
-
-type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  status: Status;
-  joinDate: string;
-  trainer?: string;
-};
-
-const users: UserRow[] = [
-  { id: '1', name: 'Emma Wilson', email: 'emma@email.com', role: 'member', status: 'active', joinDate: '2026-04-10', trainer: 'Mike Johnson' },
-  { id: '2', name: 'James Chen', email: 'james@email.com', role: 'trainer', status: 'pending', joinDate: '2026-04-08' },
-  { id: '3', name: 'Sarah Miller', email: 'sarah@email.com', role: 'member', status: 'active', joinDate: '2026-04-05', trainer: 'Mike Johnson' },
-  { id: '4', name: 'Michael Brown', email: 'michael@email.com', role: 'member', status: 'suspended', joinDate: '2026-03-28' },
-];
-
 export function UserManagementScreen() {
+  const { members, changeRole, deletePerson } = useAdminDirectory();
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const [q, setQ] = useState('');
-  const [role, setRole] = useState<'all' | Role>('all');
-  const [status, setStatus] = useState<'all' | Status>('all');
-  const [selected, setSelected] = useState<UserRow | null>(null);
+  const [selected, setSelected] = useState<(typeof members)[number] | null>(null);
+  const [menuFor, setMenuFor] = useState<(typeof members)[number] | null>(null);
+  const [roleFor, setRoleFor] = useState<(typeof members)[number] | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
 
   const filtered = useMemo(() => {
-    return users.filter(u => {
-      const match =
-        u.name.toLowerCase().includes(q.toLowerCase()) || u.email.toLowerCase().includes(q.toLowerCase());
-      const r = role === 'all' || u.role === role;
-      const s = status === 'all' || u.status === status;
-      return match && r && s;
+    return members.filter(u => {
+      const query = q.trim().toLowerCase();
+      if (!query) return true;
+      return u.name.toLowerCase().includes(query);
     });
-  }, [q, role, status]);
-
-  const badge = (t: 'role' | 'status', v: string) => {
-    const palettes: Record<string, { bg: string; fg: string }> = {
-      admin: { bg: '#f3e8ff', fg: '#6b21a8' },
-      trainer: { bg: '#dbeafe', fg: '#1d4ed8' },
-      member: { bg: '#dcfce7', fg: '#166534' },
-      active: { bg: '#dcfce7', fg: '#166534' },
-      suspended: { bg: '#fee2e2', fg: '#b91c1c' },
-      pending: { bg: '#fef9c3', fg: '#854d0e' },
-    };
-    const p = palettes[v] ?? { bg: '#f1f5f9', fg: '#475569' };
-    return (
-      <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: p.bg }}>
-        <Text style={{ color: p.fg, fontWeight: '900', fontSize: 11 }}>{v}</Text>
-      </View>
-    );
-  };
+  }, [q, members]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <ScreenHeader title="User Management" subtitle="Manage users, roles, and permissions" />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <ScreenHeader title="Users" subtitle="Members only (exclude trainers)" />
+          </View>
+          <Pressable
+            onPress={() => setAddOpen(true)}
+            style={{
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              backgroundColor: colors.accentPurple,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '900' }}>Add New</Text>
+          </Pressable>
+        </View>
 
         <View
           style={{
@@ -79,60 +70,19 @@ export function UserManagementScreen() {
             <TextInput
               value={q}
               onChangeText={setQ}
-              placeholder="Search name or email..."
+              placeholder="Search by name..."
               placeholderTextColor={colors.textMuted}
               style={{ flex: 1, paddingVertical: 8, color: colors.text }}
             />
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {(['all', 'admin', 'trainer', 'member'] as const).map(r => (
-                <Pressable
-                  key={r}
-                  onPress={() => setRole(r)}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 999,
-                    backgroundColor: role === r ? colors.accentPurple : '#f1f5f9',
-                  }}
-                >
-                  <Text style={{ fontWeight: '900', color: role === r ? '#fff' : colors.text }}>
-                    {r === 'all' ? 'All roles' : r}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {(['all', 'active', 'suspended', 'pending'] as const).map(s => (
-                <Pressable
-                  key={s}
-                  onPress={() => setStatus(s)}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 999,
-                    backgroundColor: status === s ? colors.accentPurple : '#f1f5f9',
-                  }}
-                >
-                  <Text style={{ fontWeight: '900', color: status === s ? '#fff' : colors.text }}>
-                    {s === 'all' ? 'All status' : s}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
           <Text style={{ color: colors.textMuted }}>
-            Showing {filtered.length} of {users.length} users
+            Showing {filtered.length} of {members.length} users
           </Text>
         </View>
 
         {filtered.map(u => (
-          <Pressable
+          <View
             key={u.id}
-            onPress={() => setSelected(u)}
             style={{
               marginTop: 12,
               borderRadius: 14,
@@ -157,21 +107,78 @@ export function UserManagementScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontWeight: '900', color: colors.text }}>{u.name}</Text>
-                <Text style={{ color: colors.textMuted }}>{u.email}</Text>
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  {badge('role', u.role)}
-                  {badge('status', u.status)}
-                </View>
-                <Text style={{ color: colors.textMuted, marginTop: 8, fontSize: 12 }}>Joined {u.joinDate}</Text>
-                {u.trainer ? (
-                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>Trainer: {u.trainer}</Text>
-                ) : null}
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <RoleBadge role="member" />
+              <Pressable
+                onPress={() => setMenuFor(u)}
+                style={({ pressed }) => ({ padding: 10, borderRadius: 12, opacity: pressed ? 0.85 : 1 })}
+                accessibilityLabel={`Open actions for ${u.name}`}
+              >
+                <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
+              </Pressable>
             </View>
-          </Pressable>
+          </View>
         ))}
       </ScrollView>
+
+      <Modal visible={!!menuFor} transparent animationType="fade" onRequestClose={() => setMenuFor(null)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setMenuFor(null)} />
+          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text }}>Actions</Text>
+              <Pressable onPress={() => setMenuFor(null)} style={{ padding: 6 }}>
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
+            </View>
+            {menuFor ? (
+              <View style={{ marginTop: 10, gap: 10 }}>
+                <Pressable
+                  onPress={() => {
+                    setSelected(menuFor);
+                    setMenuFor(null);
+                  }}
+                  style={({ pressed }) => ({
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ fontWeight: '900', color: colors.text }}>View Profile</Text>
+                </Pressable>
+
+                {menuFor.id === user?.id ? (
+                  <View style={{ paddingVertical: 12, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: '#f8fafc' }}>
+                    <Text style={{ fontWeight: '900', color: colors.textMuted }}>Change Role</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      setRoleFor(menuFor);
+                      setMenuFor(null);
+                    }}
+                    style={({ pressed }) => ({
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.card,
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ fontWeight: '900', color: colors.text }}>Change Role</Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -213,11 +220,11 @@ export function UserManagementScreen() {
                     <Text style={{ color: colors.textMuted }}>{selected.email}</Text>
                   </View>
                 </View>
-                <Text style={{ marginTop: 14, fontWeight: '800', color: colors.text }}>Role: {selected.role}</Text>
-                <Text style={{ marginTop: 8, fontWeight: '800', color: colors.text }}>Status: {selected.status}</Text>
-                <Text style={{ marginTop: 8, color: colors.textMuted }}>Join Date: {selected.joinDate}</Text>
-                {selected.trainer ? (
-                  <Text style={{ marginTop: 8, color: colors.textMuted }}>Trainer: {selected.trainer}</Text>
+                <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+                  <RoleBadge role="member" />
+                </View>
+                {selected.assignedTrainerId ? (
+                  <Text style={{ marginTop: 8, color: colors.textMuted }}>Assigned trainer: {selected.assignedTrainerId}</Text>
                 ) : null}
 
                 <Pressable
@@ -229,7 +236,7 @@ export function UserManagementScreen() {
                     alignItems: 'center',
                   }}
                 >
-                  <Text style={{ color: colors.accentPurple, fontWeight: '900' }}>Change Role</Text>
+                  <Text style={{ color: colors.accentPurple, fontWeight: '900' }}>Edit Profile</Text>
                 </Pressable>
                 <Pressable
                   style={{
@@ -240,24 +247,125 @@ export function UserManagementScreen() {
                     alignItems: 'center',
                   }}
                 >
-                  <Text style={{ color: '#854d0e', fontWeight: '900' }}>Suspend Account</Text>
+                  <Text style={{ color: '#854d0e', fontWeight: '900' }}>Deactivate</Text>
                 </Pressable>
                 <Pressable
-                  style={{
-                    marginTop: 10,
-                    padding: 14,
-                    borderRadius: 14,
-                    backgroundColor: '#fee2e2',
-                    alignItems: 'center',
+                  onPress={() => {
+                    deletePerson(selected.id);
+                    setSelected(null);
                   }}
+                  style={{ marginTop: 10, padding: 14, borderRadius: 14, backgroundColor: '#fee2e2', alignItems: 'center' }}
                 >
                   <Text style={{ color: colors.danger, fontWeight: '900' }}>Delete Account</Text>
                 </Pressable>
+
+                {selected.id === user?.id ? null : (
+                  <Pressable
+                    onPress={() => setRoleFor(selected)}
+                    style={({ pressed }) => ({
+                      marginTop: 10,
+                      padding: 14,
+                      borderRadius: 14,
+                      backgroundColor: '#f3e8ff',
+                      alignItems: 'center',
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ color: colors.accentPurple, fontWeight: '900' }}>Change Role</Text>
+                  </Pressable>
+                )}
               </ScrollView>
             ) : null}
           </View>
         </View>
       </Modal>
+
+      <Modal visible={addOpen} transparent animationType="slide" onRequestClose={() => setAddOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setAddOpen(false)} />
+          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text }}>Add new user</Text>
+              <Pressable onPress={() => setAddOpen(false)} style={{ padding: 6 }}>
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
+            </View>
+
+            <View style={{ marginTop: 12, gap: 10 }}>
+              <TextInput
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="Full name"
+                placeholderTextColor={colors.textMuted}
+                style={input}
+              />
+              <TextInput
+                value={newEmail}
+                onChangeText={setNewEmail}
+                placeholder="email@example.com"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                style={input}
+              />
+
+              <Pressable
+                onPress={() => {
+                  const name = newName.trim();
+                  const email = newEmail.trim();
+                  if (!name || !email) return;
+                  setNewName('');
+                  setNewEmail('');
+                  setAddOpen(false);
+                  showToast('User created (demo)');
+                }}
+                style={({ pressed }) => ({
+                  marginTop: 6,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  backgroundColor: colors.accentPurple,
+                  alignItems: 'center',
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900' }}>Create</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ChangeRoleModal
+        visible={!!roleFor}
+        onClose={() => setRoleFor(null)}
+        name={roleFor?.name ?? 'User'}
+        currentRole="member"
+        disabledReason={roleFor?.id === user?.id ? 'You cannot change your own role.' : null}
+        onConfirm={nextRole => {
+          if (!roleFor) return;
+          if (roleFor.id === user?.id) {
+            showToast('You cannot change your own role.');
+            return;
+          }
+          const res = changeRole({ personId: roleFor.id, nextRole });
+          if (!res.ok) {
+            showToast(res.reason);
+            return;
+          }
+          showToast(`${roleFor.name}'s role has been updated to ${nextRole === 'member' ? 'Member' : nextRole === 'trainer' ? 'Trainer' : 'Admin'}`);
+          setRoleFor(null);
+          setSelected(null);
+          setMenuFor(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
+
+const input = {
+  borderWidth: 1,
+  borderColor: colors.border,
+  borderRadius: 12,
+  padding: 12,
+  backgroundColor: colors.background,
+  color: colors.text,
+} as const;
