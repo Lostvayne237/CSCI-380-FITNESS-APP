@@ -4,7 +4,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/context/AuthContext';
+import { AdminDirectoryProvider } from './src/context/AdminDirectoryContext';
+import { FeatureFlagsProvider } from './src/context/FeatureFlagsContext';
+import { MessagingProvider } from './src/context/MessagingContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { ToastProvider } from './src/context/ToastContext';
+import { WorkoutProposalsProvider } from './src/context/WorkoutProposalsContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 
@@ -23,9 +28,19 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AuthProvider>
-            <AppShell />
-          </AuthProvider>
+          <ToastProvider>
+            <FeatureFlagsProvider>
+              <AdminDirectoryProvider>
+              <AuthProvider>
+                <WorkoutProposalsProvider>
+                  <MessagingProvider>
+                    <AppShell />
+                  </MessagingProvider>
+                </WorkoutProposalsProvider>
+              </AuthProvider>
+              </AdminDirectoryProvider>
+            </FeatureFlagsProvider>
+          </ToastProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

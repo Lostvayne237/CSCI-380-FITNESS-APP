@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useFeatureFlag } from '../../context/FeatureFlagsContext';
 import { useTheme } from '../../context/ThemeContext';
 import { CircularProgressRing } from './CircularProgressRing';
 
@@ -35,6 +36,26 @@ export type FoodLogListItem = {
   loggedAt: string;
 };
 
+export type ProposedWorkoutCard = {
+  id: string;
+  trainerId: string;
+  workoutName: string;
+  trainerName: string;
+  scheduledAt: string; // ISO
+  exercises: string[];
+  durationMinutes: number;
+  status: 'pending' | 'confirmed' | 'declined';
+};
+
+export type AIRecommendationCard = {
+  id: string;
+  title: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  durationMinutes: number;
+  muscleGroups: string[];
+  saved?: boolean;
+};
+
 type Props = {
   onQuickLog: () => void;
   onOpenDailyTracker: () => void;
@@ -49,6 +70,13 @@ type Props = {
   dailyActivity: DailyActivity;
   dailyTracker: DailyTracker;
   onUpdateDailyTracker: (patch: Partial<Pick<DailyTracker, 'caloriesConsumed' | 'steps'>>) => void;
+  proposedWorkouts: ProposedWorkoutCard[];
+  onConfirmProposedWorkout: (id: string) => void;
+  onDeclineProposedWorkout: (id: string) => void;
+  aiRecommendations: AIRecommendationCard[];
+  onStartRecommendation: (id: string) => void;
+  onToggleSaveRecommendation: (id: string) => void;
+  onOpenTrainerProfile: (trainerId: string) => void;
 };
 
 export function Dashboard({
@@ -65,8 +93,17 @@ export function Dashboard({
   dailyActivity,
   dailyTracker,
   onUpdateDailyTracker,
+  proposedWorkouts,
+  onConfirmProposedWorkout,
+  onDeclineProposedWorkout,
+  aiRecommendations,
+  onStartRecommendation,
+  onToggleSaveRecommendation,
+  onOpenTrainerProfile,
 }: Props) {
   const { colors } = useTheme();
+  const enableAI = useFeatureFlag('enable_ai_recommendations');
+  const enableConfirm = useFeatureFlag('enable_workout_confirmation');
   const stats = {
     steps: dailyTracker.steps,
     stepsGoal: 10000,
@@ -186,6 +223,235 @@ export function Dashboard({
           <Text style={{ fontWeight: '600', color: colors.text }}>Daily Tracker</Text>
         </Pressable>
       </View>
+
+      <View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={{ fontWeight: '600', marginBottom: 12, color: colors.text }}>My Workouts</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+            Proposed: {proposedWorkouts.filter(p => p.status === 'pending').length}
+          </Text>
+        </View>
+
+        {proposedWorkouts.length === 0 ? (
+          <View
+            style={{
+              padding: 14,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+            }}
+          >
+            <Text style={{ color: colors.textMuted }}>
+              No proposed sessions yet. When your trainer schedules something, it will appear here.
+            </Text>
+          </View>
+        ) : (
+          proposedWorkouts.slice(0, 6).map(p => {
+            const when = new Date(p.scheduledAt).toLocaleString();
+            const statusPalette =
+              p.status === 'confirmed'
+                ? { bg: '#dcfce7', fg: '#166534', label: 'Confirmed', icon: 'checkmark-circle' as const }
+                : p.status === 'declined'
+                  ? { bg: '#fee2e2', fg: '#b91c1c', label: 'Declined', icon: 'close-circle' as const }
+                  : { bg: '#fef9c3', fg: '#854d0e', label: 'Pending', icon: 'time' as const };
+
+            return (
+              <View
+                key={p.id}
+                style={{
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  padding: 14,
+                  marginBottom: 10,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '900', color: colors.text }} numberOfLines={1}>
+                      {p.workoutName}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+                      <Text style={{ color: colors.textMuted }}>Trainer:</Text>
+                      <Pressable onPress={() => onOpenTrainerProfile(p.trainerId)} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+                        <Text style={{ fontWeight: '800', color: colors.text }} numberOfLines={1}>
+                          {p.trainerName}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Text style={{ color: colors.textMuted, marginTop: 2 }} numberOfLines={1}>
+                      {when} • {p.durationMinutes} min
+                    </Text>
+                  </View>
+
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        borderRadius: 999,
+                        backgroundColor: statusPalette.bg,
+                      }}
+                    >
+                      <Ionicons name={statusPalette.icon} size={14} color={statusPalette.fg} />
+                      <Text style={{ color: statusPalette.fg, fontWeight: '900', fontSize: 11 }}>
+                        {statusPalette.label}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <Text style={{ marginTop: 10, color: colors.textMuted, fontSize: 12, fontWeight: '800' }}>
+                  Exercises
+                </Text>
+                <Text style={{ color: colors.textMuted, marginTop: 4 }} numberOfLines={2}>
+                  {p.exercises.length ? p.exercises.join(' • ') : '—'}
+                </Text>
+
+                {p.status === 'pending' && enableConfirm ? (
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                    <Pressable
+                      onPress={() => onConfirmProposedWorkout(p.id)}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        paddingVertical: 12,
+                        borderRadius: 12,
+                        backgroundColor: '#dcfce7',
+                        borderWidth: 1,
+                        borderColor: '#bbf7d0',
+                        alignItems: 'center',
+                        opacity: pressed ? 0.9 : 1,
+                      })}
+                    >
+                      <Text style={{ fontWeight: '900', color: '#166534' }}>Confirm</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => onDeclineProposedWorkout(p.id)}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        paddingVertical: 12,
+                        borderRadius: 12,
+                        backgroundColor: '#fee2e2',
+                        borderWidth: 1,
+                        borderColor: '#fecaca',
+                        alignItems: 'center',
+                        opacity: pressed ? 0.9 : 1,
+                      })}
+                    >
+                      <Text style={{ fontWeight: '900', color: colors.danger }}>Decline</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })
+        )}
+      </View>
+
+      {enableAI ? (
+      <View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={{ fontWeight: '600', marginBottom: 12, color: colors.text }}>
+            ✨ AI Recommendations
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12 }}>Recommended for you</Text>
+        </View>
+
+        {aiRecommendations.length === 0 ? (
+          <View
+            style={{
+              padding: 14,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+            }}
+          >
+            <Text style={{ color: colors.textMuted }}>
+              Keep logging workouts—recommendations will appear based on your goal and activity.
+            </Text>
+          </View>
+        ) : (
+          aiRecommendations.slice(0, 3).map(r => (
+            <View
+              key={r.id}
+              style={{
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.card,
+                padding: 14,
+                marginBottom: 10,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '900', color: colors.text }} numberOfLines={1}>
+                    {r.title}
+                  </Text>
+                  <Text style={{ color: colors.textMuted, marginTop: 4 }}>
+                    {r.difficulty} • {r.durationMinutes} min
+                  </Text>
+                  <Text style={{ color: colors.textMuted, marginTop: 6 }} numberOfLines={2}>
+                    Targets: {r.muscleGroups.join(', ')}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => onToggleSaveRecommendation(r.id)}
+                  style={({ pressed }) => ({
+                    alignSelf: 'flex-start',
+                    padding: 10,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: r.saved ? '#fef9c3' : colors.card,
+                    opacity: pressed ? 0.9 : 1,
+                  })}
+                >
+                  <Ionicons name={r.saved ? 'bookmark' : 'bookmark-outline'} size={18} color={colors.text} />
+                </Pressable>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <Pressable
+                  onPress={() => onStartRecommendation(r.id)}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    backgroundColor: colors.primary,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ fontWeight: '900', color: '#fff' }}>Start</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => onToggleSaveRecommendation(r.id)}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.9 : 1,
+                  })}
+                >
+                  <Text style={{ fontWeight: '900', color: colors.text }}>{r.saved ? 'Saved' : 'Save'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+      ) : null}
 
       <View>
         <Text style={{ fontWeight: '600', marginBottom: 12, color: colors.text }}>

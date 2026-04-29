@@ -1,8 +1,15 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
-import { LoginScreen } from '../screens/auth/LoginScreen';
-import { ResetPasswordScreen } from '../screens/auth/ResetPasswordScreen';
-import { SignUpScreen } from '../screens/auth/SignUpScreen';
+import { Suspense, lazy } from 'react';
+
+import { SuspenseFallback } from '../components/SuspenseFallback';
+const ForgotPasswordScreen = lazy(() =>
+  import('../screens/auth/ForgotPasswordScreen').then(m => ({ default: m.ForgotPasswordScreen })),
+);
+const LoginScreen = lazy(() => import('../screens/auth/LoginScreen').then(m => ({ default: m.LoginScreen })));
+const ResetPasswordScreen = lazy(() =>
+  import('../screens/auth/ResetPasswordScreen').then(m => ({ default: m.ResetPasswordScreen })),
+);
+const SignUpScreen = lazy(() => import('../screens/auth/SignUpScreen').then(m => ({ default: m.SignUpScreen })));
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -16,10 +23,42 @@ const Stack = createNativeStackNavigator<AuthStackParamList>();
 export function AuthNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="SignUp" component={SignUpScreen} />
-      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-      <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      <Stack.Screen
+        name="Login"
+      >
+        {(props: any) => (
+          <Suspense fallback={<SuspenseFallback />}>
+            <LoginScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="SignUp"
+      >
+        {(props: any) => (
+          <Suspense fallback={<SuspenseFallback />}>
+            <SignUpScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="ForgotPassword"
+      >
+        {(props: any) => (
+          <Suspense fallback={<SuspenseFallback />}>
+            <ForgotPasswordScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="ResetPassword"
+      >
+        {(props: any) => (
+          <Suspense fallback={<SuspenseFallback />}>
+            <ResetPasswordScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
     </Stack.Navigator>
   );
 }

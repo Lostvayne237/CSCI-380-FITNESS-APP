@@ -373,6 +373,19 @@ export function ProfileTab() {
                 />
               </View>
             </View>
+
+            <Pressable
+              onPress={() => setSettingsOpen(false)}
+              style={({ pressed }) => ({
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: 'center',
+                backgroundColor: colors.textMuted,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ color: '#fff', fontWeight: '900' }}>Exit</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

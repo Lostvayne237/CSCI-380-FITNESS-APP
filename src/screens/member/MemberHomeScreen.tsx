@@ -3,20 +3,28 @@ import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { MemberBottomNav, type MemberTabId } from '../../components/member/MemberBottomNav';
 import { Dashboard, type DailyActivity, type DailyTracker, type FoodLogListItem, type Workout } from '../../components/member/Dashboard';
+import { MessagesTab } from '../../components/member/MessagesTab';
 import { ProfileTab } from '../../components/member/ProfileTab';
 import { ProgressTab } from '../../components/member/ProgressTab';
 import { WorkoutTracking } from '../../components/member/WorkoutTracking';
 import { useAuth } from '../../context/AuthContext';
+import { useFeatureFlag } from '../../context/FeatureFlagsContext';
+import { useMessaging } from '../../context/MessagingContext';
 import { MemberDataProvider, type DailyHistoryEntry, type UserProfile } from '../../context/MemberDataContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useWorkoutProposals } from '../../context/WorkoutProposalsContext';
+import { getMemberById, getTrainerById } from '../../lib/mockDirectory';
+import type { MemberStackParamList } from '../../navigation/MemberNavigator';
 
 const STORAGE_WORKOUTS = 'member:workouts';
 const STORAGE_DAILY_TRACKER = 'member:dailyTracker';
 const STORAGE_DAILY_HISTORY = 'member:dailyHistory';
 const STORAGE_USER_PROFILE = 'member:userProfile';
+const STORAGE_SAVED_RECS = 'member:savedRecommendations';
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
 
@@ -159,12 +167,36 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-export function MemberHomeScreen() {
+type Props = NativeStackScreenProps<MemberStackParamList, 'MemberHome'>;
+
+export function MemberHomeScreen({ route, navigation }: Props) {
   const [tab, setTab] = useState<MemberTabId>('home');
   const [quickLog, setQuickLog] = useState(false);
   const [dailyTrackerOpen, setDailyTrackerOpen] = useState(false);
   const { user } = useAuth();
+  const enableMessaging = useFeatureFlag('enable_member_messaging');
+  const enableProgress = useFeatureFlag('enable_progress_tracking');
+  const { proposals, getProposalsForMember, setProposalStatus } = useWorkoutProposals();
+  const { sendMessage } = useMessaging();
   const { colors } = useTheme();
+
+  const memberId = useMemo(() => {
+    if (!user?.id) return 'member-1';
+    if (user.id === 'dev-member') return 'member-1';
+    return user.id;
+  }, [user?.id]);
+  const memberRow = useMemo(() => getMemberById(memberId), [memberId]);
+  const assignedTrainer = useMemo(() => getTrainerById(memberRow?.assignedTrainerId), [memberRow?.assignedTrainerId]);
+
+  useEffect(() => {
+    const initialTab = route.params?.initialTab;
+    if (initialTab) setTab(initialTab);
+  }, [route.params?.initialTab]);
+
+  useEffect(() => {
+    if (tab === 'messages' && !enableMessaging) setTab('home');
+    if (tab === 'progress' && !enableProgress) setTab('home');
+  }, [enableMessaging, enableProgress, tab]);
 
   const [state, dispatch] = useReducer(reducer, {
     workouts: [],
@@ -173,6 +205,8 @@ export function MemberHomeScreen() {
     dailyHistory: {},
     userProfile: defaultProfile({ name: user?.name, email: user?.email }),
   });
+
+  const [savedRecIds, setSavedRecIds] = useState<string[]>([]);
 
   // Mock backend data so UI stays functional without Supabase.
   const caloriesGoal = 2000;
@@ -190,6 +224,24 @@ export function MemberHomeScreen() {
       dispatch({ type: 'rolloverDay', dateKey });
     }
   }, [dateKey, state.dailyTracker.date]);
+
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(STORAGE_SAVED_RECS)
+      .then(raw => {
+        if (!mounted) return;
+        const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+        setSavedRecIds(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(STORAGE_SAVED_RECS, JSON.stringify(savedRecIds)).catch(() => {});
+  }, [savedRecIds]);
 
   useEffect(() => {
     let mounted = true;
@@ -248,6 +300,127 @@ export function MemberHomeScreen() {
     [state.selectedWorkoutId, state.workouts],
   );
 
+  const proposedWorkouts = useMemo(() => {
+    const list = getProposalsForMember(memberId);
+    return list.map(p => ({
+      id: p.id,
+      trainerId: p.trainerId,
+      workoutName: p.workoutName,
+      trainerName: getTrainerById(p.trainerId)?.name ?? assignedTrainer?.name ?? 'Trainer',
+      scheduledAt: p.scheduledAt,
+      exercises: p.exercises,
+      durationMinutes: p.durationMinutes,
+      status: p.status,
+    }));
+  }, [assignedTrainer?.name, getProposalsForMember, memberId, proposals]);
+
+  const notifyTrainer = (text: string) => {
+    if (!assignedTrainer?.id) return;
+    sendMessage({
+      trainerId: assignedTrainer.id,
+      memberId,
+      fromRole: 'member',
+      fromId: memberId,
+      text,
+    });
+  };
+
+  const confirmProposal = (id: string) => {
+    setProposalStatus({ id, status: 'confirmed' });
+    const p = proposals.find(x => x.id === id);
+    if (p) notifyTrainer(`I confirmed "${p.workoutName}" for ${new Date(p.scheduledAt).toLocaleString()}.`);
+  };
+
+  const declineProposal = (id: string) => {
+    setProposalStatus({ id, status: 'declined' });
+    const p = proposals.find(x => x.id === id);
+    if (p) notifyTrainer(`I declined "${p.workoutName}" for ${new Date(p.scheduledAt).toLocaleString()}.`);
+  };
+
+  const aiRecommendations = useMemo(() => {
+    const goal = state.userProfile.goal;
+    const workoutCount = state.workouts.length;
+    const activityLevel = workoutCount >= 12 ? 'high' : workoutCount >= 4 ? 'medium' : 'low';
+
+    const templates: Array<{
+      id: string;
+      title: string;
+      difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+      durationMinutes: number;
+      muscleGroups: string[];
+      tags: Array<UserProfile['goal']>;
+    }> = [
+      {
+        id: 'rec-1',
+        title: 'Full-Body Strength Circuit',
+        difficulty: activityLevel === 'high' ? ('Advanced' as const) : ('Intermediate' as const),
+        durationMinutes: 35,
+        muscleGroups: ['Legs', 'Back', 'Core'],
+        tags: ['build muscle', 'maintain'],
+      },
+      {
+        id: 'rec-2',
+        title: 'Low-Impact Cardio + Core',
+        difficulty: ('Beginner' as const),
+        durationMinutes: 25,
+        muscleGroups: ['Core', 'Cardio'],
+        tags: ['lose fat', 'maintain'],
+      },
+      {
+        id: 'rec-3',
+        title: 'Upper Body Push/Pull',
+        difficulty: ('Intermediate' as const),
+        durationMinutes: 40,
+        muscleGroups: ['Chest', 'Shoulders', 'Back', 'Arms'],
+        tags: ['build muscle'],
+      },
+      {
+        id: 'rec-4',
+        title: 'Mobility + Recovery Flow',
+        difficulty: ('Beginner' as const),
+        durationMinutes: 20,
+        muscleGroups: ['Hips', 'Hamstrings', 'Shoulders'],
+        tags: ['maintain', 'lose fat', 'build muscle'],
+      },
+      {
+        id: 'rec-5',
+        title: 'Interval Run (Treadmill/Outdoor)',
+        difficulty: activityLevel === 'low' ? ('Beginner' as const) : ('Intermediate' as const),
+        durationMinutes: 30,
+        muscleGroups: ['Cardio', 'Legs'],
+        tags: ['lose fat', 'maintain'],
+      },
+    ];
+
+    const scored = templates
+      .map(t => {
+        let score = 0;
+        if (t.tags.includes(goal)) score += 5;
+        if (activityLevel === 'low' && t.difficulty === 'Beginner') score += 2;
+        if (activityLevel === 'high' && t.difficulty === 'Advanced') score += 2;
+        if (dailyActivity.totalWorkouts === 0 && t.title.toLowerCase().includes('recovery')) score += 1;
+        return { ...t, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    return scored.map(s => ({
+      id: s.id,
+      title: s.title,
+      difficulty: s.difficulty,
+      durationMinutes: s.durationMinutes,
+      muscleGroups: [...s.muscleGroups],
+      saved: savedRecIds.includes(s.id),
+    }));
+  }, [dailyActivity.totalWorkouts, savedRecIds, state.userProfile.goal, state.workouts.length]);
+
+  const toggleSaveRecommendation = (id: string) => {
+    setSavedRecIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [id, ...prev]));
+  };
+
+  const startRecommendation = (_id: string) => {
+    setTab('workouts');
+  };
+
   const render = () => {
     if (quickLog) {
       return (
@@ -274,6 +447,13 @@ export function MemberHomeScreen() {
             dailyActivity={dailyActivity}
             dailyTracker={state.dailyTracker}
             onUpdateDailyTracker={patch => dispatch({ type: 'patchDailyTracker', patch, dateKey })}
+            proposedWorkouts={proposedWorkouts}
+            onConfirmProposedWorkout={confirmProposal}
+            onDeclineProposedWorkout={declineProposal}
+            aiRecommendations={aiRecommendations}
+            onStartRecommendation={startRecommendation}
+            onToggleSaveRecommendation={toggleSaveRecommendation}
+            onOpenTrainerProfile={tid => navigation.navigate('TrainerProfile', { trainerId: tid, memberId })}
           />
         );
       case 'workouts':
@@ -282,6 +462,14 @@ export function MemberHomeScreen() {
             embedded
             onClose={() => setTab('home')}
             onLogWorkout={w => dispatch({ type: 'logWorkout', workout: w, dateKey })}
+          />
+        );
+      case 'messages':
+        return (
+          <MessagesTab
+            memberId={memberId}
+            trainerId={assignedTrainer?.id ?? null}
+            onOpenTrainerProfile={tid => navigation.navigate('TrainerProfile', { trainerId: tid, memberId })}
           />
         );
       case 'progress':
@@ -298,6 +486,13 @@ export function MemberHomeScreen() {
             dailyActivity={dailyActivity}
             dailyTracker={state.dailyTracker}
             onUpdateDailyTracker={patch => dispatch({ type: 'patchDailyTracker', patch, dateKey })}
+            proposedWorkouts={proposedWorkouts}
+            onConfirmProposedWorkout={confirmProposal}
+            onDeclineProposedWorkout={declineProposal}
+            aiRecommendations={aiRecommendations}
+            onStartRecommendation={startRecommendation}
+            onToggleSaveRecommendation={toggleSaveRecommendation}
+            onOpenTrainerProfile={tid => navigation.navigate('TrainerProfile', { trainerId: tid, memberId })}
           />
         );
     }
@@ -319,12 +514,16 @@ export function MemberHomeScreen() {
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
         <View style={{ flex: 1 }}>
-          <ScrollView
-            contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {render()}
-          </ScrollView>
+          {tab === 'messages' ? (
+            <View style={{ flex: 1, padding: 20, paddingBottom: 32 }}>{render()}</View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              {render()}
+            </ScrollView>
+          )}
           {!quickLog && <MemberBottomNav active={tab} onChange={setTab} />}
         </View>
 

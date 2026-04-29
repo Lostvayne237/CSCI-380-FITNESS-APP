@@ -69,7 +69,7 @@ export function ProgressTab() {
       <View>
         <Text style={{ fontWeight: '800', marginBottom: 10, color: colors.text }}>Today overview</Text>
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <MetricCard icon="barbell" label="Workouts" value={String(today.totalWorkouts)} tint={colors.accentPurple} />
+          <MetricCard icon="barbell" label="Workouts" value={String(today.totalWorkouts)} tint={colors.accent} />
           <MetricCard icon="time" label="Duration (min)" value={String(today.totalDuration)} tint="#10b981" />
         </View>
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>

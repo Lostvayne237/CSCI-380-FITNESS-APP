@@ -1,8 +1,15 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Suspense, lazy } from 'react';
 
-import { ClientDetailScreen } from '../screens/trainer/ClientDetailScreen';
-import { ClientRosterScreen } from '../screens/trainer/ClientRosterScreen';
+import { SuspenseFallback } from '../components/SuspenseFallback';
 import { colors } from '../theme/colors';
+
+const ClientRosterScreen = lazy(() =>
+  import('../screens/trainer/ClientRosterScreen').then(m => ({ default: m.ClientRosterScreen })),
+);
+const ClientDetailScreen = lazy(() =>
+  import('../screens/trainer/ClientDetailScreen').then(m => ({ default: m.ClientDetailScreen })),
+);
 
 export type ClientsStackParamList = {
   ClientRoster: undefined;
@@ -22,14 +29,24 @@ export function ClientsStack() {
     >
       <Stack.Screen
         name="ClientRoster"
-        component={ClientRosterScreen}
-        options={{ title: 'Clients' }}
-      />
+        options={{ title: 'Members' }}
+      >
+        {(props: any) => (
+          <Suspense fallback={<SuspenseFallback />}>
+            <ClientRosterScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
       <Stack.Screen
         name="ClientDetail"
-        component={ClientDetailScreen}
-        options={{ title: 'Client' }}
-      />
+        options={{ title: 'Member' }}
+      >
+        {(props: any) => (
+          <Suspense fallback={<SuspenseFallback />}>
+            <ClientDetailScreen {...props} />
+          </Suspense>
+        )}
+      </Stack.Screen>
     </Stack.Navigator>
   );
 }

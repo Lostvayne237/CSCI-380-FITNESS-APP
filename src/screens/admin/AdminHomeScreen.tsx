@@ -1,19 +1,14 @@
+import { useMemo } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
 import { ScreenHeader } from '../../components/ScreenHeader';
+import { useWorkoutProposals } from '../../context/WorkoutProposalsContext';
 import { colors } from '../../theme/colors';
 
 type Props = BottomTabScreenProps<any, 'AdminHome'>;
-
-const stats = [
-  { label: 'Total Members', value: '2,847', change: '+12%', icon: 'people' as const, tint: '#2563eb' },
-  { label: 'Active Today', value: '1,234', change: '+8%', icon: 'flash' as const, tint: '#16a34a' },
-  { label: 'New This Week', value: '156', change: '+24%', icon: 'trending-up' as const, tint: '#7c3aed' },
-  { label: 'Revenue MTD', value: '$47,892', change: '+18%', icon: 'wallet' as const, tint: '#059669' },
-];
 
 const actions = [
   { label: 'Add Trainer', icon: 'person-add' as const, tab: 'Trainers' as const },
@@ -29,6 +24,29 @@ const activity = [
 ];
 
 export function AdminHomeScreen({ navigation }: Props) {
+  const { proposals } = useWorkoutProposals();
+
+  const activeSessionsToday = useMemo(() => {
+    const key = new Date().toISOString().slice(0, 10);
+    return proposals.filter(p => p.status === 'confirmed' && p.scheduledAt.slice(0, 10) === key).length;
+  }, [proposals]);
+
+  const stats = useMemo(
+    () => [
+      { label: 'Total Members', value: '2,847', change: '+12%', icon: 'people' as const, tint: '#2563eb' },
+      { label: 'Active Today', value: '1,234', change: '+8%', icon: 'flash' as const, tint: '#16a34a' },
+      { label: 'New This Week', value: '156', change: '+24%', icon: 'trending-up' as const, tint: '#7c3aed' },
+      {
+        label: 'Active Sessions Today',
+        value: String(activeSessionsToday),
+        change: '',
+        icon: 'calendar' as const,
+        tint: '#059669',
+      },
+    ],
+    [activeSessionsToday],
+  );
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
@@ -61,7 +79,7 @@ export function AdminHomeScreen({ navigation }: Props) {
                 >
                   <Ionicons name={s.icon} size={22} color={s.tint} />
                 </View>
-                <Text style={{ color: '#16a34a', fontWeight: '900' }}>{s.change}</Text>
+                {s.change ? <Text style={{ color: '#16a34a', fontWeight: '900' }}>{s.change}</Text> : <View />}
               </View>
               <Text style={{ color: colors.textMuted, marginTop: 10, fontSize: 12 }}>{s.label}</Text>
               <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text, marginTop: 4 }}>{s.value}</Text>

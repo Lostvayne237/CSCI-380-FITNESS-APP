@@ -1,112 +1,152 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useAuth } from '../../context/AuthContext';
+import { useMessaging } from '../../context/MessagingContext';
+import { getMemberById, membersDirectory } from '../../lib/mockDirectory';
 import { colors } from '../../theme/colors';
 
-type Chat = {
-  id: string;
-  name: string;
-  letter: string;
-  last: string;
-  time: string;
-  unread: number;
-};
-
-type Msg = { id: string; side: 'trainer' | 'client'; text: string; time: string };
-
-const chats: Chat[] = [
-  { id: '1', name: 'Emma Wilson', letter: 'E', last: 'Thanks for the new workout plan!', time: '10m', unread: 2 },
-  { id: '2', name: 'Sarah Miller', letter: 'S', last: 'Can we reschedule tomorrow?', time: '1h', unread: 1 },
-  { id: '3', name: 'Lisa Anderson', letter: 'L', last: 'Perfect, see you then!', time: '3h', unread: 0 },
-];
-
-const thread: Record<string, Msg[]> = {
-  '1': [
-    { id: '1', side: 'client', text: "Hi Mike! Just finished today's workout", time: '2:30 PM' },
-    { id: '2', side: 'trainer', text: 'Awesome! How did it feel?', time: '2:32 PM' },
-    { id: '3', side: 'client', text: 'Really good! The squats were challenging but manageable', time: '2:33 PM' },
-    { id: '4', side: 'trainer', text: "That's great to hear!", time: '2:35 PM' },
-    { id: '5', side: 'client', text: 'Thanks for the new workout plan!', time: '2:36 PM' },
-  ],
-};
-
 export function TrainerMessagingScreen() {
-  const [active, setActive] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { threads, ensureThread, getThreadMessages, sendMessage } = useMessaging();
+  const [activeThread, setActiveThread] = useState<string | null>(null);
   const [text, setText] = useState('');
-  const messages = active ? thread[active] ?? [] : [];
 
-  if (!active) {
+  const trainerId = useMemo(() => {
+    if (!user?.id) return 'trainer-1';
+    if (user.id === 'dev-trainer') return 'trainer-1';
+    return user.id;
+  }, [user?.id]);
+
+  const trainerThreads = useMemo(
+    () => threads.filter(t => t.trainerId === trainerId),
+    [threads, trainerId],
+  );
+
+  const activeMeta = useMemo(
+    () => (activeThread ? trainerThreads.find(t => t.threadKey === activeThread) ?? null : null),
+    [activeThread, trainerThreads],
+  );
+  const activeMember = useMemo(
+    () => (activeMeta ? getMemberById(activeMeta.memberId) : null),
+    [activeMeta],
+  );
+  const messages = useMemo(() => (activeThread ? getThreadMessages(activeThread) : []), [activeThread, getThreadMessages]);
+
+  if (!activeThread) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
         <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
           <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text }}>Messages</Text>
-          <Text style={{ color: colors.textMuted, marginTop: 4 }}>Chat With Your Clients</Text>
+          <Text style={{ color: colors.textMuted, marginTop: 4 }}>Chat with your members</Text>
         </View>
         <FlatList
-          data={chats}
-          keyExtractor={c => c.id}
+          data={trainerThreads}
+          keyExtractor={t => t.threadKey}
           contentContainerStyle={{ padding: 16, paddingTop: 0 }}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => setActive(item.id)}
-              style={{
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: colors.border,
-                backgroundColor: colors.card,
-                padding: 14,
-                marginBottom: 10,
-                flexDirection: 'row',
-                gap: 12,
-                alignItems: 'center',
-              }}
-            >
-              <View
+          ListEmptyComponent={
+            <View style={{ padding: 16 }}>
+              <Text style={{ color: colors.textMuted }}>No conversations yet.</Text>
+              <Text style={{ color: colors.textMuted, marginTop: 6 }}>
+                Tip: open a member profile and send a proposal or message to start a thread.
+              </Text>
+              <View style={{ height: 12 }} />
+              <Text style={{ fontWeight: '900', color: colors.text }}>Quick start (demo)</Text>
+              <Text style={{ color: colors.textMuted, marginTop: 6 }}>Tap a member to start a chat.</Text>
+              <View style={{ marginTop: 10, gap: 10 }}>
+                {membersDirectory.slice(0, 3).map(m => (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => setActiveThread(ensureThread({ trainerId, memberId: m.id }))}
+                    style={{
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.card,
+                      padding: 14,
+                      flexDirection: 'row',
+                      gap: 12,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: colors.primary,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '900' }}>{m.name.charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '900', color: colors.text }}>{m.name}</Text>
+                      <Text style={{ color: colors.textMuted }} numberOfLines={1}>
+                        {m.email}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const member = getMemberById(item.memberId);
+            const msgs = getThreadMessages(item.threadKey);
+            const last = msgs.length ? msgs[msgs.length - 1] : null;
+            return (
+              <Pressable
+                onPress={() => setActiveThread(item.threadKey)}
                 style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
-                  backgroundColor: colors.primary,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  padding: 14,
+                  marginBottom: 10,
+                  flexDirection: 'row',
+                  gap: 12,
                   alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>{item.letter}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontWeight: '900', color: colors.text }}>{item.name}</Text>
-                  <Text style={{ fontSize: 12, color: colors.textMuted }}>{item.time}</Text>
-                </View>
-                <Text style={{ color: colors.textMuted, marginTop: 4 }} numberOfLines={1}>
-                  {item.last}
-                </Text>
-              </View>
-              {item.unread ? (
                 <View
                   style={{
-                    minWidth: 22,
-                    height: 22,
-                    borderRadius: 11,
-                    backgroundColor: colors.danger,
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    backgroundColor: colors.primary,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    paddingHorizontal: 6,
                   }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>{item.unread}</Text>
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>
+                    {(member?.name ?? 'M').charAt(0).toUpperCase()}
+                  </Text>
                 </View>
-              ) : null}
-            </Pressable>
-          )}
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ fontWeight: '900', color: colors.text }}>{member?.name ?? 'Member'}</Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted }}>
+                      {item.lastMessageAt ? new Date(item.lastMessageAt).toLocaleDateString() : ''}
+                    </Text>
+                  </View>
+                  <Text style={{ color: colors.textMuted, marginTop: 4 }} numberOfLines={1}>
+                    {last?.text ?? 'No messages yet'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            );
+          }}
         />
       </SafeAreaView>
     );
   }
-
-  const chat = chats.find(c => c.id === active);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
@@ -122,7 +162,7 @@ export function TrainerMessagingScreen() {
           gap: 10,
         }}
       >
-        <Pressable onPress={() => setActive(null)} style={{ padding: 6 }}>
+        <Pressable onPress={() => setActiveThread(null)} style={{ padding: 6 }}>
           <Ionicons name="arrow-back" size={22} color={colors.text} />
         </Pressable>
         <View
@@ -135,10 +175,12 @@ export function TrainerMessagingScreen() {
             justifyContent: 'center',
           }}
         >
-          <Text style={{ color: '#fff', fontWeight: '900' }}>{chat?.letter}</Text>
+          <Text style={{ color: '#fff', fontWeight: '900' }}>
+            {(activeMember?.name ?? 'M').charAt(0).toUpperCase()}
+          </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontWeight: '900', color: colors.text }}>{chat?.name}</Text>
+          <Text style={{ fontWeight: '900', color: colors.text }}>{activeMember?.name ?? 'Member'}</Text>
           <Text style={{ fontSize: 12, color: '#16a34a', fontWeight: '700' }}>● Online</Text>
         </View>
       </View>
@@ -150,7 +192,7 @@ export function TrainerMessagingScreen() {
         renderItem={({ item }) => (
           <View
             style={{
-              alignSelf: item.side === 'trainer' ? 'flex-end' : 'flex-start',
+              alignSelf: item.fromRole === 'trainer' ? 'flex-end' : 'flex-start',
               maxWidth: '88%',
               marginBottom: 10,
             }}
@@ -159,13 +201,13 @@ export function TrainerMessagingScreen() {
               style={{
                 padding: 12,
                 borderRadius: 14,
-                backgroundColor: item.side === 'trainer' ? colors.primary : '#f1f5f9',
+                backgroundColor: item.fromRole === 'trainer' ? colors.primary : '#f1f5f9',
               }}
             >
-              <Text style={{ color: item.side === 'trainer' ? '#fff' : colors.text }}>{item.text}</Text>
+              <Text style={{ color: item.fromRole === 'trainer' ? '#fff' : colors.text }}>{item.text}</Text>
             </View>
             <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, paddingHorizontal: 6 }}>
-              {item.time}
+              {new Date(item.createdAt).toLocaleString()}
             </Text>
           </View>
         )}
@@ -200,7 +242,17 @@ export function TrainerMessagingScreen() {
           multiline
         />
         <Pressable
-          onPress={() => setText('')}
+          onPress={() => {
+            if (!activeMeta) return;
+            sendMessage({
+              trainerId,
+              memberId: activeMeta.memberId,
+              fromRole: 'trainer',
+              fromId: trainerId,
+              text,
+            });
+            setText('');
+          }}
           style={{
             backgroundColor: colors.primary,
             paddingHorizontal: 14,

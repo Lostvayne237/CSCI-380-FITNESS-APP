@@ -1,9 +1,10 @@
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useFeatureFlag } from '../../context/FeatureFlagsContext';
 import { useTheme } from '../../context/ThemeContext';
 
-export type MemberTabId = 'home' | 'workouts' | 'progress' | 'profile';
+export type MemberTabId = 'home' | 'workouts' | 'messages' | 'progress' | 'profile';
 
 type Props = {
   active: MemberTabId;
@@ -13,12 +14,22 @@ type Props = {
 const tabs: { id: MemberTabId; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'workouts', label: 'Workouts', icon: 'barbell' },
+  { id: 'messages', label: 'Messages', icon: 'chatbubbles' },
   { id: 'progress', label: 'Progress', icon: 'trending-up' },
   { id: 'profile', label: 'Profile', icon: 'person' },
 ];
 
 export function MemberBottomNav({ active, onChange }: Props) {
   const { colors } = useTheme();
+  const enableMemberMessaging = useFeatureFlag('enable_member_messaging');
+  const enableProgress = useFeatureFlag('enable_progress_tracking');
+
+  const visibleTabs = tabs.filter(t => {
+    if (t.id === 'messages' && !enableMemberMessaging) return false;
+    if (t.id === 'progress' && !enableProgress) return false;
+    return true;
+  });
+
   return (
     <View
       style={{
@@ -31,7 +42,7 @@ export function MemberBottomNav({ active, onChange }: Props) {
         justifyContent: 'space-around',
       }}
     >
-      {tabs.map(tab => {
+      {visibleTabs.map(tab => {
         const selected = active === tab.id;
         return (
           <Pressable
