@@ -14,7 +14,7 @@ type Filter = 'All' | 'Strength' | 'Cardio' | 'Flexibility' | 'Daily' | 'Complet
 export function ChallengesTab({ userId }: { userId: string }) {
   const { colors } = useTheme();
   const { showToast } = useToast();
-  const { challenges, markComplete, isCompleted, getCompletedAt } = useChallenges();
+  const { challenges, joinChallenge, completeChallenge, isCompleted, isJoined, isActive, getCompletedAt } = useChallenges();
   const { userProfile, updateUserProfile } = useMemberData();
   const reducedMotion = usePrefersReducedMotion();
 
@@ -23,17 +23,30 @@ export function ChallengesTab({ userId }: { userId: string }) {
   const [pulseFor, setPulseFor] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    return challenges.filter(c => {
+    const active = challenges.filter(c => isActive(c.id));
+    return active.filter(c => {
       if (filter === 'All') return true;
-      if (filter === 'Daily') return c.deadline === 'daily';
+      if (filter === 'Daily') return false;
       if (filter === 'Completed') return isCompleted(c.id, userId);
       return c.category === filter;
     });
-  }, [challenges, filter, isCompleted, userId]);
+  }, [challenges, filter, isActive, isCompleted, userId]);
+
+  const onJoin = (id: string) => {
+    const res = joinChallenge({ challengeId: id, userId });
+    if (!res.ok) {
+      showToast(res.reason);
+      return;
+    }
+    showToast('Joined challenge');
+  };
 
   const onComplete = (id: string) => {
-    const res = markComplete({ challengeId: id, userId });
-    if (!res.ok) return;
+    const res = completeChallenge({ challengeId: id, userId });
+    if (!res.ok) {
+      showToast(res.reason);
+      return;
+    }
     setPulseFor(id);
     setTimeout(() => setPulseFor(null), 700);
     updateUserProfile({
@@ -128,13 +141,17 @@ export function ChallengesTab({ userId }: { userId: string }) {
                       <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: '#fef9c3' }}>
                         <Text style={{ fontWeight: '900', color: '#854d0e', fontSize: 11 }}>🏆 {c.pointsReward} pts</Text>
                       </View>
-                      {c.deadline ? (
+                      {c.endsAt ? (
                         <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: '#dcfce7' }}>
                           <Text style={{ fontWeight: '900', color: '#166534', fontSize: 11 }}>
-                            {c.deadline === 'daily' ? 'Resets daily' : c.deadline === 'weekly' ? 'Weekly' : 'Ongoing'}
+                            Ends {new Date(c.endsAt).toLocaleDateString()}
                           </Text>
                         </View>
-                      ) : null}
+                      ) : (
+                        <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: '#dcfce7' }}>
+                          <Text style={{ fontWeight: '900', color: '#166534', fontSize: 11 }}>No deadline</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -145,6 +162,22 @@ export function ChallengesTab({ userId }: { userId: string }) {
                       ✅ Completed{completedAt ? ` · ${new Date(completedAt).toLocaleString()}` : ''}
                     </Text>
                   </View>
+                ) : !isJoined(c.id, userId) ? (
+                  <Pressable
+                    onPress={() => onJoin(c.id)}
+                    style={({ pressed }) => ({
+                      marginTop: 12,
+                      paddingVertical: 12,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.card,
+                      alignItems: 'center',
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ fontWeight: '900', color: colors.text }}>Join Challenge</Text>
+                  </Pressable>
                 ) : (
                   <Pressable
                     onPress={() => setConfirmFor(c.id)}

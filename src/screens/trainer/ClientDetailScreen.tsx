@@ -162,12 +162,6 @@ export function ClientDetailScreen({ route, navigation }: Props) {
                 </View>
               </View>
             </View>
-            <Pressable
-              onPress={() => setTab('messages')}
-              style={{ alignSelf: 'flex-start', padding: 10, borderRadius: 12, backgroundColor: '#eff6ff' }}
-            >
-              <Ionicons name="chatbubble-ellipses" size={20} color={colors.primary} />
-            </Pressable>
           </View>
         </View>
 
@@ -543,6 +537,7 @@ export function ClientDetailScreen({ route, navigation }: Props) {
             </View>
           </View>
         )}
+
         {tab === 'nutrition' && (
           <Text style={{ marginTop: 16, color: colors.textMuted }}>Nutrition Tracking Will Appear Here.</Text>
         )}

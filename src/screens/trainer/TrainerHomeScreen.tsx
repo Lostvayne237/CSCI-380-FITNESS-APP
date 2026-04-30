@@ -1,11 +1,12 @@
-import { useMemo } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { useAuth } from '../../context/AuthContext';
+import { useChallenges } from '../../context/ChallengesContext';
 import { useWorkoutProposals } from '../../context/WorkoutProposalsContext';
 import { getMemberById, membersDirectory } from '../../lib/mockDirectory';
 import { colors } from '../../theme/colors';
@@ -14,6 +15,12 @@ export function TrainerHomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { getProposalsForTrainer } = useWorkoutProposals();
+  const { createChallenge } = useChallenges();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [pointsText, setPointsText] = useState('50');
+  const [durationDaysText, setDurationDaysText] = useState('7');
 
   const trainerId = useMemo(() => {
     if (!user?.id) return 'trainer-1';
@@ -69,6 +76,36 @@ export function TrainerHomeScreen() {
     ];
   }, [myMembers, pendingByMemberId, upcomingWeek.length]);
 
+  const input = {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: colors.background,
+    color: colors.text,
+  } as const;
+
+  const onCreate = () => {
+    const t = title.trim();
+    if (!t) return;
+    const pts = Math.max(0, Number(pointsText || 0) || 0);
+    const daysRaw = Number(durationDaysText || 0) || 0;
+    const durationDays = daysRaw > 0 ? Math.min(365, Math.max(1, Math.round(daysRaw))) : null;
+    createChallenge({
+      trainerId,
+      title: t,
+      description: desc.trim() || 'Trainer challenge',
+      pointsReward: pts,
+      durationDays,
+    });
+    setTitle('');
+    setDesc('');
+    setPointsText('50');
+    setDurationDaysText('7');
+    setCreateOpen(false);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
@@ -113,6 +150,40 @@ export function TrainerHomeScreen() {
               <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, marginTop: 4 }}>{s.value}</Text>
             </View>
           ))}
+        </View>
+
+        <View
+          style={{
+            marginTop: 18,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+            padding: 14,
+          }}
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: '900', color: colors.text }}>Challenges</Text>
+              <Text style={{ color: colors.textMuted, marginTop: 6 }}>Create a challenge members can join and complete for points.</Text>
+            </View>
+            <Pressable
+              onPress={() => setCreateOpen(true)}
+              style={({ pressed }) => ({
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: colors.primary,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '900' }}>Create</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View
@@ -276,6 +347,80 @@ export function TrainerHomeScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={createOpen} transparent animationType="slide" onRequestClose={() => setCreateOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={() => setCreateOpen(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+                padding: 16,
+                maxHeight: '90%',
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text }}>Create Challenge</Text>
+                <Pressable onPress={() => setCreateOpen(false)} style={{ padding: 6 }}>
+                  <Ionicons name="close" size={22} color={colors.text} />
+                </Pressable>
+              </View>
+
+              <ScrollView style={{ marginTop: 12 }} keyboardShouldPersistTaps="handled">
+                <Text style={{ fontSize: 12, fontWeight: '900', color: colors.text }}>Title</Text>
+                <TextInput value={title} onChangeText={setTitle} placeholder="e.g., 100 Jumping Jacks" placeholderTextColor={colors.textMuted} style={input} />
+
+                <Text style={{ fontSize: 12, fontWeight: '900', color: colors.text, marginTop: 12 }}>Description</Text>
+                <TextInput
+                  value={desc}
+                  onChangeText={setDesc}
+                  placeholder="What should members do?"
+                  placeholderTextColor={colors.textMuted}
+                  style={[input, { minHeight: 80, textAlignVertical: 'top' }]}
+                  multiline
+                />
+
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.text }}>Points</Text>
+                    <TextInput value={pointsText} onChangeText={setPointsText} keyboardType="number-pad" placeholder="50" placeholderTextColor={colors.textMuted} style={input} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: colors.text }}>Duration (days)</Text>
+                    <TextInput
+                      value={durationDaysText}
+                      onChangeText={setDurationDaysText}
+                      keyboardType="number-pad"
+                      placeholder="7"
+                      placeholderTextColor={colors.textMuted}
+                      style={input}
+                    />
+                  </View>
+                </View>
+
+                <Pressable
+                  onPress={onCreate}
+                  style={({ pressed }) => ({
+                    marginTop: 16,
+                    paddingVertical: 12,
+                    borderRadius: 14,
+                    backgroundColor: colors.primary,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '900' }}>Create</Text>
+                </Pressable>
+                <View style={{ height: 10 }} />
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

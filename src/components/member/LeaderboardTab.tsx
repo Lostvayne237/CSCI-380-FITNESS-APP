@@ -1,82 +1,65 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 
+import { useChallenges } from '../../context/ChallengesContext';
 import { useMemberData } from '../../context/MemberDataContext';
 import { useMessaging } from '../../context/MessagingContext';
 import { useTheme } from '../../context/ThemeContext';
 import { motionDuration, usePrefersReducedMotion } from '../../lib/motion';
-
-type Range = 'week' | 'month' | 'all';
+import { membersDirectory } from '../../lib/mockDirectory';
 
 type PublicMember = {
   id: string;
   name: string;
-  fitnessGoal: string | null;
-  activityLevel: string | null;
   points: number;
   challengesCompleted: number;
-  streakDays: number;
-  longestStreakDays?: number;
 };
-
-function goalMini(goal: string | null) {
-  if (!goal) return { t: 'Goal: —', bg: '#f1f5f9', fg: '#334155' };
-  const g = goal;
-  if (g === 'lose_weight') return { t: '🔥 Lose', bg: '#ffedd5', fg: '#9a3412' };
-  if (g === 'build_muscle') return { t: '🏋️ Muscle', bg: '#eff6ff', fg: '#1d4ed8' };
-  if (g === 'improve_flexibility') return { t: '🧘 Flex', bg: '#dcfce7', fg: '#166534' };
-  if (g === 'boost_endurance') return { t: '🏃 Endurance', bg: '#fef9c3', fg: '#854d0e' };
-  if (g === 'maintain_fitness') return { t: '⚖️ Maintain', bg: '#f1f5f9', fg: '#334155' };
-  return { t: '💪 General', bg: '#f3e8ff', fg: '#7c3aed' };
-}
 
 export function LeaderboardTab({ meId }: { meId: string }) {
   const { colors } = useTheme();
   const { userProfile } = useMemberData();
-  const { threads, ensureCommunityThread, getThreadMessages, sendCommunityMessage } = useMessaging();
+  const { challenges } = useChallenges();
+  const { ensureCommunityThread, getThreadMessages, sendCommunityMessage } = useMessaging();
   const reducedMotion = usePrefersReducedMotion();
-  const [range, setRange] = useState<Range>('all');
   const [selected, setSelected] = useState<PublicMember | null>(null);
   const [chatFor, setChatFor] = useState<PublicMember | null>(null);
   const [text, setText] = useState('');
+  const [threadKey, setThreadKey] = useState<string | null>(null);
 
   const community = useMemo<PublicMember[]>(() => {
-    const seed: PublicMember[] = [
-      { id: 'member-1', name: 'Emma Wilson', fitnessGoal: 'lose_weight', activityLevel: 'moderate', points: 320, challengesCompleted: 6, streakDays: 7, longestStreakDays: 14 },
-      { id: 'member-2', name: 'Sarah Miller', fitnessGoal: 'build_muscle', activityLevel: 'very_active', points: 410, challengesCompleted: 7, streakDays: 4, longestStreakDays: 9 },
-      { id: 'member-3', name: 'Michael Brown', fitnessGoal: 'maintain_fitness', activityLevel: 'light', points: 120, challengesCompleted: 2, streakDays: 0, longestStreakDays: 5 },
-      { id: 'member-4', name: 'Ava Thompson', fitnessGoal: 'general_fitness', activityLevel: 'moderate', points: 260, challengesCompleted: 5, streakDays: 10, longestStreakDays: 18 },
-      { id: 'member-5', name: 'Noah Garcia', fitnessGoal: 'boost_endurance', activityLevel: 'athlete', points: 520, challengesCompleted: 9, streakDays: 21, longestStreakDays: 30 },
-      { id: 'member-6', name: 'Mia Davis', fitnessGoal: 'improve_flexibility', activityLevel: 'light', points: 180, challengesCompleted: 3, streakDays: 5, longestStreakDays: 12 },
-      { id: 'member-7', name: 'Liam Martinez', fitnessGoal: 'lose_weight', activityLevel: 'sedentary', points: 90, challengesCompleted: 1, streakDays: 1, longestStreakDays: 4 },
-      { id: 'member-8', name: 'Olivia Lee', fitnessGoal: 'build_muscle', activityLevel: 'moderate', points: 360, challengesCompleted: 6, streakDays: 8, longestStreakDays: 15 },
-      { id: 'member-9', name: 'Ethan Clark', fitnessGoal: 'general_fitness', activityLevel: 'very_active', points: 295, challengesCompleted: 5, streakDays: 12, longestStreakDays: 20 },
-      { id: 'member-10', name: 'Sophia Nguyen', fitnessGoal: 'maintain_fitness', activityLevel: 'moderate', points: 210, challengesCompleted: 4, streakDays: 6, longestStreakDays: 11 },
-    ];
+    const baseMembers = membersDirectory.map(m => ({ id: m.id, name: m.name }));
 
-    // Replace "me" with real local profile values, but keep it in the list for highlighting/rank.
-    const mine: PublicMember = {
-      id: meId,
-      name: userProfile.name ?? 'You',
-      fitnessGoal: userProfile.fitnessGoal,
-      activityLevel: userProfile.activityLevel,
-      points: userProfile.points ?? 0,
-      challengesCompleted: userProfile.challengesCompleted ?? 0,
-      streakDays: userProfile.streakDays ?? 0,
-      longestStreakDays: userProfile.streakDays ?? 0,
-    };
+    const pointsById: Record<string, number> = {};
+    const completedCountById: Record<string, number> = {};
+    for (const c of challenges) {
+      for (const uid of c.completedBy ?? []) {
+        pointsById[uid] = (pointsById[uid] ?? 0) + (Number(c.pointsReward || 0) || 0);
+        completedCountById[uid] = (completedCountById[uid] ?? 0) + 1;
+      }
+    }
 
-    const list = seed.filter(x => x.id !== meId);
-    return [mine, ...list];
-  }, [meId, userProfile.activityLevel, userProfile.challengesCompleted, userProfile.fitnessGoal, userProfile.name, userProfile.points, userProfile.streakDays]);
+    const challengePointsMe = pointsById[meId] ?? 0;
+    const extraFromProfile = Math.max(0, (userProfile.points ?? 0) - challengePointsMe);
+
+    return baseMembers.map(m => {
+      const challengePoints = pointsById[m.id] ?? 0;
+      const totalPoints = m.id === meId ? challengePoints + extraFromProfile : challengePoints;
+      return {
+        id: m.id,
+        name: m.id === meId ? userProfile.name ?? m.name ?? 'You' : m.name,
+        points: totalPoints,
+        challengesCompleted: completedCountById[m.id] ?? 0,
+      } satisfies PublicMember;
+    });
+  }, [challenges, meId, userProfile.name, userProfile.points]);
 
   const ranked = useMemo(() => {
-    // range is UI-only right now (mock); keep sorting consistent.
+    // Ranking is total points.
     const sorted = [...community].sort((a, b) => b.points - a.points);
     return sorted.map((m, idx) => ({ ...m, rank: idx + 1 }));
-  }, [community, range]);
+  }, [community]);
 
   const myRow = useMemo(() => ranked.find(r => r.id === meId) ?? null, [meId, ranked]);
 
@@ -85,9 +68,12 @@ export function LeaderboardTab({ meId }: { meId: string }) {
     setText('');
   };
 
-  const threadKey = useMemo(() => {
-    if (!chatFor) return null;
-    return ensureCommunityThread({ memberAId: meId, memberBId: chatFor.id });
+  useEffect(() => {
+    if (!chatFor) {
+      setThreadKey(null);
+      return;
+    }
+    setThreadKey(ensureCommunityThread({ memberAId: meId, memberBId: chatFor.id }));
   }, [chatFor, ensureCommunityThread, meId]);
 
   const messages = threadKey ? getThreadMessages(threadKey) : [];
@@ -96,29 +82,7 @@ export function LeaderboardTab({ meId }: { meId: string }) {
     <View style={{ flex: 1 }}>
       <View style={{ marginBottom: 12 }}>
         <Text style={{ fontSize: 22, fontWeight: '900', color: colors.text }}>🏆 Leaderboard</Text>
-        <Text style={{ color: colors.textMuted, marginTop: 4 }}>Rankings based on challenge points</Text>
-      </View>
-
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        {([
-          { id: 'week', label: 'This Week' },
-          { id: 'month', label: 'This Month' },
-          { id: 'all', label: 'All Time' },
-        ] as const).map(t => (
-          <Pressable
-            key={t.id}
-            onPress={() => setRange(t.id)}
-            style={({ pressed }) => ({
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 999,
-              backgroundColor: range === t.id ? colors.primary : '#f1f5f9',
-              opacity: pressed ? 0.9 : 1,
-            })}
-          >
-            <Text style={{ fontWeight: '900', color: range === t.id ? '#fff' : colors.text }}>{t.label}</Text>
-          </Pressable>
-        ))}
+        <Text style={{ color: colors.textMuted, marginTop: 4 }}>Rankings based on total points</Text>
       </View>
 
       <FlatList
@@ -129,7 +93,6 @@ export function LeaderboardTab({ meId }: { meId: string }) {
           const topBg = item.rank === 1 ? '#fef9c3' : item.rank === 2 ? '#f1f5f9' : item.rank === 3 ? '#ffedd5' : colors.card;
           const topBorder = item.rank === 1 ? '#fde68a' : item.rank === 2 ? colors.border : item.rank === 3 ? '#fdba74' : colors.border;
           const highlight = item.id === meId;
-          const pill = goalMini(item.fitnessGoal);
           return (
             <MotiView
               from={{ opacity: 0, translateY: 15 }}
@@ -172,14 +135,6 @@ export function LeaderboardTab({ meId }: { meId: string }) {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontWeight: '900', color: colors.text }}>{item.name}</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                      <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: pill.bg }}>
-                        <Text style={{ fontWeight: '900', color: pill.fg, fontSize: 11 }}>{pill.t}</Text>
-                      </View>
-                      <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: '#fee2e2' }}>
-                        <Text style={{ fontWeight: '900', color: '#b91c1c', fontSize: 11 }}>🔥 {item.streakDays}</Text>
-                      </View>
-                    </View>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={{ fontWeight: '900', color: colors.text }}>{item.points} pts</Text>
@@ -230,14 +185,10 @@ export function LeaderboardTab({ meId }: { meId: string }) {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text }}>{selected.name}</Text>
-                    <Text style={{ color: colors.textMuted, marginTop: 2 }}>{goalMini(selected.fitnessGoal).t}</Text>
                   </View>
                 </View>
-                <Text style={{ color: colors.textMuted }}>Current streak 🔥: {selected.streakDays}</Text>
-                <Text style={{ color: colors.textMuted }}>Longest streak 🔥: {selected.longestStreakDays ?? selected.streakDays}</Text>
                 <Text style={{ color: colors.textMuted }}>Total points: {selected.points}</Text>
                 <Text style={{ color: colors.textMuted }}>Challenges completed: {selected.challengesCompleted}</Text>
-                <Text style={{ color: colors.textMuted }}>Activity level: {selected.activityLevel ?? '—'}</Text>
 
                 <Pressable
                   onPress={() => {

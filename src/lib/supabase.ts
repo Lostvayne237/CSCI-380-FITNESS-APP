@@ -11,12 +11,12 @@ export const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   String(getExtra().SUPABASE_URL || '');
 
-const anonKey =
+export const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   String(getExtra().SUPABASE_ANON_KEY || '');
 
 // NOTE: rotate keys before production if you ever hardcode them during setup.
-export const supabase = createClient(SUPABASE_URL, anonKey, {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: AsyncStorage,
     persistSession: true,

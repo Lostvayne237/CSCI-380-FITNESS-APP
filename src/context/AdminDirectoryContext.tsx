@@ -38,6 +38,7 @@ type AdminDirectoryContextValue = {
   admins: AdminAdminRow[];
   getPerson: (id: string) => AdminPersonBase | null;
   getTrainer: (trainerId: string) => AdminTrainerRow | null;
+  addPerson: (args: { id: string; name: string; email: string; role: UserRole }) => { ok: true } | { ok: false; reason: string };
   setPersonActive: (args: { personId: string; active: boolean }) => void;
   deletePerson: (personId: string) => void;
   changeRole: (args: { personId: string; nextRole: UserRole }) => { ok: true } | { ok: false; reason: string };
@@ -68,6 +69,7 @@ type Stored = {
     }
   >;
   deletedIds?: string[];
+  customPeople?: AdminPersonBase[];
 };
 
 const AdminDirectoryContext = createContext<AdminDirectoryContextValue | undefined>(undefined);
@@ -77,6 +79,7 @@ export function AdminDirectoryProvider({ children }: { children: React.ReactNode
   const [roleById, setRoleById] = useState<Record<string, UserRole>>({});
   const [trainerProfileById, setTrainerProfileById] = useState<Record<string, Partial<TrainerDirectoryRow>>>({});
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [customPeople, setCustomPeople] = useState<AdminPersonBase[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -97,6 +100,19 @@ export function AdminDirectoryProvider({ children }: { children: React.ReactNode
         setRoleById(nextRole);
         setTrainerProfileById(nextTrainerProfile);
         if (parsed.deletedIds?.length) setDeletedIds(new Set(parsed.deletedIds));
+        if (Array.isArray(parsed.customPeople)) {
+          const cleaned = parsed.customPeople
+            .map(p => ({
+              id: String((p as any).id ?? ''),
+              name: String((p as any).name ?? ''),
+              email: String((p as any).email ?? '').trim().toLowerCase(),
+              avatarUri: (p as any).avatarUri ?? null,
+              role: String((p as any).role ?? 'member') as UserRole,
+              active: typeof (p as any).active === 'boolean' ? ((p as any).active as boolean) : true,
+            }))
+            .filter(p => p.id && p.email && p.name);
+          setCustomPeople(cleaned);
+        }
       } catch {
         // ignore
       }
@@ -121,9 +137,10 @@ export function AdminDirectoryProvider({ children }: { children: React.ReactNode
         ]),
       ),
       deletedIds: Array.from(deletedIds),
+      customPeople,
     };
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload)).catch(() => {});
-  }, [activeById, deletedIds, roleById, trainerProfileById]);
+  }, [activeById, customPeople, deletedIds, roleById, trainerProfileById]);
 
   const seedPeople = useMemo(() => {
     const members = seedMembers.map(m => ({ ...m, role: 'member' as const }));
@@ -131,7 +148,7 @@ export function AdminDirectoryProvider({ children }: { children: React.ReactNode
     const devAdmin: AdminAdminRow = {
       id: 'dev-admin',
       name: 'Dev Admin',
-      email: 'admin@fake.local',
+      email: 'admin@demo.local',
       avatarUri: null,
       role: 'admin',
       active: true,
@@ -140,21 +157,25 @@ export function AdminDirectoryProvider({ children }: { children: React.ReactNode
   }, []);
 
   const people = useMemo<AdminPersonBase[]>(() => {
-    return seedPeople
-      .filter(p => !deletedIds.has(p.id))
-      .map(p => {
-        const active = activeById[p.id] ?? true;
-        const role = roleById[p.id] ?? (p as any).role;
-        return {
-          id: p.id,
-          name: (p as any).name,
-          email: (p as any).email,
-          avatarUri: (p as any).avatarUri ?? null,
-          role,
-          active,
-        } satisfies AdminPersonBase;
+    const merged = [...seedPeople, ...customPeople];
+    const map = new Map<string, AdminPersonBase>();
+    for (const p of merged) {
+      const id = (p as any).id;
+      if (!id) continue;
+      if (deletedIds.has(id)) continue;
+      const active = activeById[id] ?? (p as any).active ?? true;
+      const role = roleById[id] ?? (p as any).role ?? 'member';
+      map.set(id, {
+        id,
+        name: String((p as any).name ?? ''),
+        email: String((p as any).email ?? ''),
+        avatarUri: (p as any).avatarUri ?? null,
+        role: role as UserRole,
+        active: !!active,
       });
-  }, [activeById, deletedIds, roleById, seedPeople]);
+    }
+    return Array.from(map.values());
+  }, [activeById, customPeople, deletedIds, roleById, seedPeople]);
 
   const members = useMemo<AdminMemberRow[]>(() => {
     return seedMembers
@@ -229,6 +250,21 @@ export function AdminDirectoryProvider({ children }: { children: React.ReactNode
     setDeletedIds(prev => new Set([...prev, personId]));
   }, []);
 
+  const addPerson = useCallback(
+    ({ id, name, email, role }: { id: string; name: string; email: string; role: UserRole }) => {
+      const cleanEmail = email.trim().toLowerCase();
+      if (!id || !name.trim() || !cleanEmail) return { ok: false as const, reason: 'Missing required fields.' };
+      const exists = people.some(p => p.id === id || p.email.trim().toLowerCase() === cleanEmail);
+      if (exists) return { ok: false as const, reason: 'A user with this email already exists.' };
+      setCustomPeople(prev => [
+        { id, name: name.trim(), email: cleanEmail, role, active: true, avatarUri: null },
+        ...prev,
+      ]);
+      return { ok: true as const };
+    },
+    [people],
+  );
+
   const getPerson = useCallback((id: string) => people.find(p => p.id === id) ?? null, [people]);
   const getTrainer = useCallback((trainerId: string) => trainers.find(t => t.id === trainerId) ?? null, [trainers]);
 
@@ -277,11 +313,12 @@ export function AdminDirectoryProvider({ children }: { children: React.ReactNode
       admins,
       getPerson,
       getTrainer,
+      addPerson,
       setPersonActive,
       deletePerson,
       changeRole,
     }),
-    [admins, changeRole, getPerson, getTrainer, members, people, setPersonActive, trainers, deletePerson],
+    [addPerson, admins, changeRole, getPerson, getTrainer, members, people, setPersonActive, trainers, deletePerson],
   );
 
   return <AdminDirectoryContext.Provider value={value}>{children}</AdminDirectoryContext.Provider>;

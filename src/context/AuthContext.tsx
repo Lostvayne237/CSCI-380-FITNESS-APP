@@ -11,7 +11,7 @@ import { CommonActions } from '@react-navigation/native';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { navigationRef } from '../navigation/navigationRef';
-import { supabase } from '../lib/supabase';
+import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '../lib/supabase';
 
 export type UserRole = 'admin' | 'trainer' | 'member';
 
@@ -32,6 +32,7 @@ export type Profile = {
 
 const STORAGE_KEY = 'auth:user';
 const ADMIN_DIRECTORY_KEY = 'adminDirectory:v1';
+const LOCAL_ACCOUNTS_KEY = 'auth:localAccounts:v1';
 const DEV_MEMBER_KEYS_TO_CLEAR = [
   'member:userProfile',
   'member:workouts',
@@ -43,19 +44,47 @@ const DEV_MEMBER_KEYS_TO_CLEAR = [
   'challenges:v1',
   'chat:v1',
 ] as const;
-const DEV_FAKE_ADMIN_EMAIL = 'admin@fake.local';
-const DEV_FAKE_ADMIN_PASSWORD = 'admin';
-const DEV_FAKE_ADMIN_ID = 'dev-admin';
+type LocalAccount = {
+  id: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  name: string;
+  active: boolean;
+  createdAt: string;
+};
 
-const DEV_FAKE_MEMBER_EMAIL = 'member@demo.local';
-const DEV_FAKE_MEMBER_PASSWORD = 'demo';
-const DEV_FAKE_MEMBER_ID = 'dev-member';
+const SEED_ACCOUNTS: LocalAccount[] = [
+  {
+    id: 'dev-member',
+    email: 'member@demo.com',
+    password: 'password123',
+    role: 'member',
+    name: 'Demo Member',
+    active: true,
+    createdAt: new Date(0).toISOString(),
+  },
+  {
+    id: 'dev-trainer',
+    email: 'trainer@demo.com',
+    password: 'password123',
+    role: 'trainer',
+    name: 'Demo Trainer',
+    active: true,
+    createdAt: new Date(0).toISOString(),
+  },
+  {
+    id: 'dev-admin',
+    email: 'admin@demo.com',
+    password: 'password123',
+    role: 'admin',
+    name: 'Demo Admin',
+    active: true,
+    createdAt: new Date(0).toISOString(),
+  },
+];
 
-const DEV_FAKE_TRAINER_EMAIL = 'trainer@demo.local';
-const DEV_FAKE_TRAINER_PASSWORD = 'demo';
-const DEV_FAKE_TRAINER_ID = 'dev-trainer';
-
-const DEV_FAKE_USER_IDS = new Set([DEV_FAKE_ADMIN_ID, DEV_FAKE_MEMBER_ID, DEV_FAKE_TRAINER_ID]);
+const LOCAL_USER_IDS = new Set(SEED_ACCOUNTS.map(a => a.id));
 
 interface AuthContextType {
   user: User | null;
@@ -87,10 +116,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isHydrated, setIsHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const isDevFakeUser = useCallback(
-    (u: User | null) => (u ? DEV_FAKE_USER_IDS.has(u.id) : false),
-    [],
-  );
+  const hasSupabase = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+
+  const isLocalUser = useCallback((u: User | null) => (u ? LOCAL_USER_IDS.has(u.id) : false), []);
+
+  const readLocalAccounts = useCallback(async (): Promise<LocalAccount[]> => {
+    try {
+      const raw = await AsyncStorage.getItem(LOCAL_ACCOUNTS_KEY);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+      const arr = Array.isArray(parsed) ? (parsed as any[]) : [];
+      return arr
+        .map(x => ({
+          id: String(x?.id ?? ''),
+          email: String(x?.email ?? '').trim().toLowerCase(),
+          password: String(x?.password ?? ''),
+          role: String(x?.role ?? 'member') as UserRole,
+          name: String(x?.name ?? ''),
+          active: typeof x?.active === 'boolean' ? (x.active as boolean) : true,
+          createdAt: String(x?.createdAt ?? new Date().toISOString()),
+        }))
+        .filter(a => a.id && a.email && a.password);
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const writeLocalAccounts = useCallback(async (accounts: LocalAccount[]) => {
+    await AsyncStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(accounts));
+  }, []);
+
+  const ensureSeedAccounts = useCallback(async () => {
+    const existing = await readLocalAccounts();
+    const byEmail = new Map(existing.map(a => [a.email, a]));
+    let mutated = false;
+    for (const seed of SEED_ACCOUNTS) {
+      if (!byEmail.has(seed.email)) {
+        byEmail.set(seed.email, seed);
+        mutated = true;
+      }
+    }
+    const merged = Array.from(byEmail.values());
+    if (mutated) await writeLocalAccounts(merged);
+    // Keep LOCAL_USER_IDS stable: only seed ids are considered "local demo"
+    // (admin-created accounts are not treated specially).
+  }, [readLocalAccounts, writeLocalAccounts]);
 
   const loadSupabaseUserAndProfile = useCallback(async () => {
     // `getSession()` can be stale right after sign-in; `getUser()` is authoritative.
@@ -152,8 +221,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    // Dev-only fake demo session is local; don't let Supabase overwrite it.
-    if (isDevFakeUser(user)) return;
+    // Local demo session is stored locally; don't let Supabase overwrite it.
+    if (isLocalUser(user)) return;
     try {
       setLoading(true);
       const u = await loadSupabaseUserAndProfile();
@@ -165,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [isDevFakeUser, loadSupabaseUserAndProfile, user]);
+  }, [isLocalUser, loadSupabaseUserAndProfile, user]);
 
   useEffect(() => {
     let mounted = true;
@@ -173,25 +242,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         setLoading(true);
-        // Dev convenience: when you scan the Expo QR code, always start at Login
+        await ensureSeedAccounts();
+
+        // Dev convenience: when scanning the Expo QR code, always start at Login
         // (prevents a previously persisted session from immediately skipping Login).
         if (__DEV__) {
           try {
-            await withTimeout(supabase.auth.signOut(), 5000, 'Sign out');
+            await AsyncStorage.removeItem(STORAGE_KEY);
           } catch {
             // ignore
           }
-          await AsyncStorage.removeItem(STORAGE_KEY);
-          setProfile(null);
-          setUser(null);
+          if (mounted) {
+            setUser(null);
+            setProfile(null);
+          }
+          try {
+            if (hasSupabase) await withTimeout(supabase.auth.signOut(), 5000, 'Sign out');
+          } catch {
+            // ignore
+          }
           return;
         }
 
-        const u = await loadSupabaseUserAndProfile();
-        if (!mounted) return;
-        setUser(u);
-        if (u) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
-        else await AsyncStorage.removeItem(STORAGE_KEY);
+        // Prefer a persisted local session (demo/offline) if present.
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        const stored = raw ? (JSON.parse(raw) as any) : null;
+        if (stored?.id && stored?.email && stored?.role) {
+          const restored: User = {
+            id: String(stored.id),
+            email: String(stored.email),
+            role: String(stored.role) as UserRole,
+            name: String(stored.name ?? stored.email?.split?.('@')?.[0] ?? 'User'),
+          };
+          if (mounted) {
+            setUser(restored);
+            setProfile({
+              id: restored.id,
+              email: restored.email,
+              full_name: restored.name,
+              role: restored.role,
+              created_at: null,
+            });
+          }
+          return;
+        }
+
+        // Otherwise hydrate from Supabase if configured.
+        if (hasSupabase) {
+          const u = await loadSupabaseUserAndProfile();
+          if (!mounted) return;
+          setUser(u);
+          if (u) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+          else await AsyncStorage.removeItem(STORAGE_KEY);
+        } else {
+          if (mounted) {
+            setProfile(null);
+            setUser(null);
+          }
+        }
       } finally {
         if (mounted) setLoading(false);
         if (mounted) setIsHydrated(true);
@@ -215,8 +323,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       try {
-        // Dev-only fake demo session is local; ignore Supabase auth events.
-        if (isDevFakeUser(user)) return;
+        // Local demo session is local; ignore Supabase auth events.
+        if (isLocalUser(user)) return;
+        if (!hasSupabase) return;
         setLoading(true);
         const u = await loadSupabaseUserAndProfile();
         setUser(u);
@@ -230,7 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
     return () => sub.subscription.unsubscribe();
-  }, [isDevFakeUser, loadSupabaseUserAndProfile, user]);
+  }, [hasSupabase, isLocalUser, loadSupabaseUserAndProfile, user]);
 
   const login = useCallback(async (email: string, password: string) => {
     setAuthError(null);
@@ -238,84 +347,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
 
-      // Dev convenience: local fake demo logins (bypass Supabase).
-      if (__DEV__ && e === DEV_FAKE_MEMBER_EMAIL && password === DEV_FAKE_MEMBER_PASSWORD) {
-        // Always behave like a first login for the dev member.
-        try {
-          await AsyncStorage.multiRemove([...DEV_MEMBER_KEYS_TO_CLEAR]);
-        } catch {
-          // ignore
+      // Local demo/offline logins (seed + admin-created local accounts).
+      await ensureSeedAccounts();
+      const local = await readLocalAccounts();
+      const acct = local.find(a => a.email === e && a.password === password) ?? null;
+      if (acct) {
+        // For the demo member, behave like a first login each time to keep onboarding/test data consistent.
+        if (acct.email === 'member@demo.com') {
+          try {
+            await AsyncStorage.multiRemove([...DEV_MEMBER_KEYS_TO_CLEAR]);
+          } catch {
+            // ignore
+          }
         }
-        const fake: User = {
-          id: DEV_FAKE_MEMBER_ID,
-          email: DEV_FAKE_MEMBER_EMAIL,
-          name: 'Demo Member',
-          role: 'member',
-        };
-        setProfile({
-          id: fake.id,
-          email: fake.email,
-          full_name: fake.name,
-          role: fake.role,
-          created_at: null,
-        });
-        setUser(fake);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fake));
-        return;
-      }
-      if (__DEV__ && e === DEV_FAKE_TRAINER_EMAIL && password === DEV_FAKE_TRAINER_PASSWORD) {
+
+        // If account is marked inactive in admin directory overrides, block login.
         try {
           const raw = await AsyncStorage.getItem(ADMIN_DIRECTORY_KEY);
           const parsed = raw ? (JSON.parse(raw) as any) : null;
-          const active = parsed?.people?.[DEV_FAKE_TRAINER_ID]?.active;
-          if (active === false) {
-            setAuthError('This trainer account is inactive.');
+          const activeOverride = parsed?.people?.[acct.id]?.active;
+          const effectiveActive = typeof activeOverride === 'boolean' ? activeOverride : acct.active;
+          if (!effectiveActive) {
+            setAuthError('This account is inactive.');
             return;
           }
         } catch {
           // ignore
         }
-        const fake: User = {
-          id: DEV_FAKE_TRAINER_ID,
-          email: DEV_FAKE_TRAINER_EMAIL,
-          name: 'Demo Trainer',
-          role: 'trainer',
-        };
-        setProfile({
-          id: fake.id,
-          email: fake.email,
-          full_name: fake.name,
-          role: fake.role,
-          created_at: null,
-        });
-        setUser(fake);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fake));
-        return;
-      }
-      if (__DEV__ && e === DEV_FAKE_ADMIN_EMAIL && password === DEV_FAKE_ADMIN_PASSWORD) {
-        const fake: User = {
-          id: DEV_FAKE_ADMIN_ID,
-          email: DEV_FAKE_ADMIN_EMAIL,
-          name: 'Dev Admin',
-          role: 'admin',
-        };
-        setProfile({
-          id: fake.id,
-          email: fake.email,
-          full_name: fake.name,
-          role: fake.role,
-          created_at: null,
-        });
-        setUser(fake);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(fake));
+
+        const u: User = { id: acct.id, email: acct.email, name: acct.name, role: acct.role };
+        setProfile({ id: u.id, email: u.email, full_name: u.name, role: u.role, created_at: null });
+        setUser(u);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
         return;
       }
 
-      const { error } = await withTimeout(
-        supabase.auth.signInWithPassword({ email: e, password }),
-        10000,
-        'Login',
-      );
+      if (!hasSupabase) {
+        setAuthError('Invalid email or password.');
+        throw new Error('Invalid email or password.');
+      }
+
+      const { error } = await withTimeout(supabase.auth.signInWithPassword({ email: e, password }), 10000, 'Login');
       if (error) throw error;
       const u = await loadSupabaseUserAndProfile();
       setUser(u);
@@ -328,7 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [loadSupabaseUserAndProfile]);
+  }, [ensureSeedAccounts, hasSupabase, loadSupabaseUserAndProfile, readLocalAccounts]);
 
   const signUp = useCallback(async (args: { fullName: string; email: string; password: string }) => {
     setAuthError(null);
@@ -338,12 +410,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (args.password.length < 6) throw new Error('Password must be at least 6 characters');
     try {
       setLoading(true);
-      const { data, error } = await withTimeout(
-        supabase.auth.signUp({
+      await ensureSeedAccounts();
+
+      // If Supabase isn't configured, create a local demo account instead.
+      if (!hasSupabase) {
+        const existing = await readLocalAccounts();
+        if (existing.some(a => a.email === email)) throw new Error('An account with this email already exists');
+        const next: LocalAccount = {
+          id: `local-${Math.random().toString(16).slice(2)}-${Date.now()}`,
           email,
           password: args.password,
-          options: { data: { full_name: fullName, role: 'member' } },
-        }),
+          role: 'member',
+          name: fullName,
+          active: true,
+          createdAt: new Date().toISOString(),
+        };
+        await writeLocalAccounts([next, ...existing]);
+        const u: User = { id: next.id, email: next.email, name: next.name, role: next.role };
+        setProfile({ id: u.id, email: u.email, full_name: u.name, role: u.role, created_at: null });
+        setUser(u);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+        return;
+      }
+
+      const { data, error } = await withTimeout(
+        supabase.auth.signUp({ email, password: args.password, options: { data: { full_name: fullName, role: 'member' } } }),
         10000,
         'Sign up',
       );
@@ -360,13 +451,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [loadSupabaseUserAndProfile]);
+  }, [ensureSeedAccounts, hasSupabase, loadSupabaseUserAndProfile, readLocalAccounts, writeLocalAccounts]);
 
   const logout = useCallback(async () => {
     setUser(null);
     setProfile(null);
     try {
-      await supabase.auth.signOut();
+      if (hasSupabase) await supabase.auth.signOut();
     } catch {
       // ignore
     }
@@ -376,7 +467,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         CommonActions.reset({ index: 0, routes: [{ name: 'Auth' }] }),
       );
     }
-  }, []);
+  }, [hasSupabase]);
 
   const value = useMemo(
     () => ({

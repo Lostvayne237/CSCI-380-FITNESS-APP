@@ -181,8 +181,8 @@ export function OnboardingFlow({
               onPress={step > 1 ? onBack : onSkip}
               style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.85 : 1 })}
             >
-              <Ionicons name={step > 1 ? 'arrow-back' : 'close'} size={18} color={colors.textMuted} />
-              <Text style={{ color: colors.textMuted, fontWeight: '800' }}>{step > 1 ? 'Back' : 'Exit'}</Text>
+              <Ionicons name="arrow-back" size={18} color={colors.textMuted} />
+              <Text style={{ color: colors.textMuted, fontWeight: '800' }}>Back</Text>
             </Pressable>
 
             <Animated.View style={{ opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }}>
