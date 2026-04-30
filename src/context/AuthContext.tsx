@@ -32,6 +32,17 @@ export type Profile = {
 
 const STORAGE_KEY = 'auth:user';
 const ADMIN_DIRECTORY_KEY = 'adminDirectory:v1';
+const DEV_MEMBER_KEYS_TO_CLEAR = [
+  'member:userProfile',
+  'member:workouts',
+  'member:dailyTracker',
+  'member:dailyHistory',
+  // legacy key from removed AI recs
+  'member:savedRecommendations',
+  // challenges + messaging are local demo stores
+  'challenges:v1',
+  'chat:v1',
+] as const;
 const DEV_FAKE_ADMIN_EMAIL = 'admin@fake.local';
 const DEV_FAKE_ADMIN_PASSWORD = 'admin';
 const DEV_FAKE_ADMIN_ID = 'dev-admin';
@@ -229,6 +240,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Dev convenience: local fake demo logins (bypass Supabase).
       if (__DEV__ && e === DEV_FAKE_MEMBER_EMAIL && password === DEV_FAKE_MEMBER_PASSWORD) {
+        // Always behave like a first login for the dev member.
+        try {
+          await AsyncStorage.multiRemove([...DEV_MEMBER_KEYS_TO_CLEAR]);
+        } catch {
+          // ignore
+        }
         const fake: User = {
           id: DEV_FAKE_MEMBER_ID,
           email: DEV_FAKE_MEMBER_EMAIL,

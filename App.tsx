@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './src/context/AuthContext';
 import { AdminDirectoryProvider } from './src/context/AdminDirectoryContext';
+import { ChallengesProvider } from './src/context/ChallengesContext';
 import { FeatureFlagsProvider } from './src/context/FeatureFlagsContext';
 import { MessagingProvider } from './src/context/MessagingContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -31,6 +32,7 @@ export default function App() {
           <ToastProvider>
             <FeatureFlagsProvider>
               <AdminDirectoryProvider>
+              <ChallengesProvider>
               <AuthProvider>
                 <WorkoutProposalsProvider>
                   <MessagingProvider>
@@ -38,6 +40,7 @@ export default function App() {
                   </MessagingProvider>
                 </WorkoutProposalsProvider>
               </AuthProvider>
+              </ChallengesProvider>
               </AdminDirectoryProvider>
             </FeatureFlagsProvider>
           </ToastProvider>

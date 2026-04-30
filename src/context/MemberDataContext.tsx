@@ -6,9 +6,31 @@ export type UserProfile = {
   email: string;
   avatarUri: string | null;
   age: number;
+  // Legacy fields used by older AI logic (kept for backwards compatibility)
   weight?: number | null;
   height?: number | null;
   goal: 'lose fat' | 'build muscle' | 'maintain';
+
+  // Onboarding + metrics
+  hasCompletedOnboarding: boolean;
+  heightCm: number | null;
+  weightKg: number | null;
+  bmi: number | null;
+  fitnessGoal:
+    | 'build_muscle'
+    | 'lose_weight'
+    | 'improve_flexibility'
+    | 'boost_endurance'
+    | 'maintain_fitness'
+    | 'general_fitness'
+    | null;
+  activityLevel: 'sedentary' | 'light' | 'moderate' | 'very_active' | 'athlete' | null;
+
+  // Challenges / community
+  points: number;
+  challengesCompleted: number;
+  memberSince: string | null; // YYYY-MM-DD
+
   totalWorkouts: number;
   totalSteps: number;
   streakDays: number;
@@ -32,7 +54,28 @@ export type MemberDataContextValue = {
   dailyHistory: Record<string, DailyHistoryEntry>;
   userProfile: UserProfile;
   updateUserProfile: (
-    patch: Partial<Pick<UserProfile, 'name' | 'email' | 'avatarUri' | 'age' | 'weight' | 'height' | 'goal' | 'notificationsEnabled'>>,
+    patch: Partial<
+      Pick<
+        UserProfile,
+        | 'name'
+        | 'email'
+        | 'avatarUri'
+        | 'age'
+        | 'weight'
+        | 'height'
+        | 'goal'
+        | 'notificationsEnabled'
+        | 'hasCompletedOnboarding'
+        | 'heightCm'
+        | 'weightKg'
+        | 'bmi'
+        | 'fitnessGoal'
+        | 'activityLevel'
+        | 'points'
+        | 'challengesCompleted'
+        | 'memberSince'
+      >
+    >,
   ) => void;
   updateDailyTracker: (patch: Partial<Pick<DailyTracker, 'caloriesConsumed' | 'steps'>>) => void;
   logWorkout: (workout: Workout) => void;

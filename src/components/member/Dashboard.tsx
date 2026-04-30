@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useFeatureFlag } from '../../context/FeatureFlagsContext';
@@ -50,10 +50,12 @@ export type ProposedWorkoutCard = {
 export type AIRecommendationCard = {
   id: string;
   title: string;
+  category: 'Strength' | 'Cardio' | 'Flexibility' | 'Endurance' | 'Mixed';
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   durationMinutes: number;
   muscleGroups: string[];
   saved?: boolean;
+  why: string;
 };
 
 type Props = {
@@ -76,6 +78,8 @@ type Props = {
   aiRecommendations: AIRecommendationCard[];
   onStartRecommendation: (id: string) => void;
   onToggleSaveRecommendation: (id: string) => void;
+  onRefreshRecommendations: () => void;
+  onPromptSetGoal: () => void;
   onOpenTrainerProfile: (trainerId: string) => void;
 };
 
@@ -99,6 +103,8 @@ export function Dashboard({
   aiRecommendations,
   onStartRecommendation,
   onToggleSaveRecommendation,
+  onRefreshRecommendations,
+  onPromptSetGoal,
   onOpenTrainerProfile,
 }: Props) {
   const { colors } = useTheme();
@@ -354,103 +360,160 @@ export function Dashboard({
       </View>
 
       {enableAI ? (
-      <View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <Text style={{ fontWeight: '600', marginBottom: 12, color: colors.text }}>
-            ✨ AI Recommendations
-          </Text>
-          <Text style={{ color: colors.textMuted, fontSize: 12 }}>Recommended for you</Text>
-        </View>
-
-        {aiRecommendations.length === 0 ? (
-          <View
-            style={{
-              padding: 14,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.card,
-            }}
-          >
-            <Text style={{ color: colors.textMuted }}>
-              Keep logging workouts—recommendations will appear based on your goal and activity.
-            </Text>
-          </View>
-        ) : (
-          aiRecommendations.slice(0, 3).map(r => (
-            <View
-              key={r.id}
-              style={{
-                borderRadius: 14,
+        <View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View>
+              <Text style={{ fontWeight: '900', marginBottom: 2, color: colors.text }}>✨ Recommended For You</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>Personalized suggestions</Text>
+            </View>
+            <Pressable
+              onPress={onRefreshRecommendations}
+              style={({ pressed }) => ({
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 999,
                 borderWidth: 1,
                 borderColor: colors.border,
                 backgroundColor: colors.card,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ fontWeight: '900', color: colors.text }}>Refresh</Text>
+            </Pressable>
+          </View>
+
+          {aiRecommendations.length === 0 ? (
+            <View
+              style={{
+                marginTop: 12,
                 padding: 14,
-                marginBottom: 10,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.card,
               }}
             >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '900', color: colors.text }} numberOfLines={1}>
-                    {r.title}
-                  </Text>
-                  <Text style={{ color: colors.textMuted, marginTop: 4 }}>
-                    {r.difficulty} • {r.durationMinutes} min
-                  </Text>
-                  <Text style={{ color: colors.textMuted, marginTop: 6 }} numberOfLines={2}>
-                    Targets: {r.muscleGroups.join(', ')}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => onToggleSaveRecommendation(r.id)}
-                  style={({ pressed }) => ({
-                    alignSelf: 'flex-start',
-                    padding: 10,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    backgroundColor: r.saved ? '#fef9c3' : colors.card,
-                    opacity: pressed ? 0.9 : 1,
-                  })}
-                >
-                  <Ionicons name={r.saved ? 'bookmark' : 'bookmark-outline'} size={18} color={colors.text} />
-                </Pressable>
-              </View>
-
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-                <Pressable
-                  onPress={() => onStartRecommendation(r.id)}
-                  style={({ pressed }) => ({
-                    flex: 1,
-                    paddingVertical: 12,
-                    borderRadius: 12,
-                    backgroundColor: colors.primary,
-                    alignItems: 'center',
-                    opacity: pressed ? 0.85 : 1,
-                  })}
-                >
-                  <Text style={{ fontWeight: '900', color: '#fff' }}>Start</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onToggleSaveRecommendation(r.id)}
-                  style={({ pressed }) => ({
-                    flex: 1,
-                    paddingVertical: 12,
-                    borderRadius: 12,
-                    backgroundColor: colors.card,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    alignItems: 'center',
-                    opacity: pressed ? 0.9 : 1,
-                  })}
-                >
-                  <Text style={{ fontWeight: '900', color: colors.text }}>{r.saved ? 'Saved' : 'Save'}</Text>
-                </Pressable>
-              </View>
+              <Text style={{ fontWeight: '900', color: colors.text }}>Set your fitness goal</Text>
+              <Text style={{ color: colors.textMuted, marginTop: 6 }}>
+                Set your fitness goal to get personalized recommendations.
+              </Text>
+              <Pressable
+                onPress={onPromptSetGoal}
+                style={({ pressed }) => ({
+                  marginTop: 12,
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  backgroundColor: colors.primary,
+                  alignItems: 'center',
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900' }}>Go to Profile</Text>
+              </Pressable>
             </View>
-          ))
-        )}
-      </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 10, paddingRight: 8 }}>
+                {aiRecommendations.slice(0, 6).map(r => {
+                  const icon =
+                    r.category === 'Strength'
+                      ? ('barbell' as const)
+                      : r.category === 'Cardio'
+                        ? ('walk' as const)
+                        : r.category === 'Flexibility'
+                          ? ('leaf' as const)
+                          : r.category === 'Endurance'
+                            ? ('bicycle' as const)
+                            : ('sparkles' as const);
+                  return (
+                    <View
+                      key={r.id}
+                      style={{
+                        width: 260,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                        padding: 14,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <View
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 12,
+                                backgroundColor: '#eff6ff',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Ionicons name={icon} size={18} color={colors.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontWeight: '900', color: colors.text }} numberOfLines={1}>
+                                {r.title}
+                              </Text>
+                              <Text style={{ color: colors.textMuted, marginTop: 2, fontSize: 12 }}>
+                                {r.durationMinutes} min • {r.category}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: '#f1f5f9' }}>
+                              <Text style={{ fontWeight: '900', color: colors.textMuted, fontSize: 11 }}>{r.difficulty}</Text>
+                            </View>
+                            <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: '#eff6ff' }}>
+                              <Text style={{ fontWeight: '900', color: colors.primary, fontSize: 11 }} numberOfLines={1}>
+                                {r.why}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text style={{ color: colors.textMuted, marginTop: 10 }} numberOfLines={2}>
+                            Focus: {r.muscleGroups.join(', ')}
+                          </Text>
+                        </View>
+
+                        <Pressable
+                          onPress={() => onToggleSaveRecommendation(r.id)}
+                          style={({ pressed }) => ({
+                            alignSelf: 'flex-start',
+                            padding: 10,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            backgroundColor: r.saved ? '#fef9c3' : colors.card,
+                            opacity: pressed ? 0.9 : 1,
+                          })}
+                        >
+                          <Ionicons name={r.saved ? 'bookmark' : 'bookmark-outline'} size={18} color={colors.text} />
+                        </Pressable>
+                      </View>
+
+                      <Pressable
+                        onPress={() => onStartRecommendation(r.id)}
+                        style={({ pressed }) => ({
+                          marginTop: 12,
+                          paddingVertical: 12,
+                          borderRadius: 12,
+                          backgroundColor: colors.primary,
+                          alignItems: 'center',
+                          opacity: pressed ? 0.9 : 1,
+                        })}
+                      >
+                        <Text style={{ fontWeight: '900', color: '#fff' }}>Start Workout</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          )}
+        </View>
       ) : null}
 
       <View>

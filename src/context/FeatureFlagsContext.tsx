@@ -7,6 +7,8 @@ export type FeatureFlagKey =
   | 'enable_workout_confirmation'
   | 'enable_progress_tracking'
   | 'enable_streak_tracking'
+  | 'enable_challenges'
+  | 'enable_leaderboard'
   | 'enable_trainer_availability'
   | 'enable_session_proposals'
   | 'enable_video_sessions'
@@ -38,7 +40,7 @@ const meta: FeatureFlagMeta[] = [
   {
     key: 'enable_ai_recommendations',
     name: 'AI workout recommendations',
-    description: 'Show personalized AI recommendations on the member dashboard.',
+    description: 'Show goal-based AI recommendations on the member dashboard.',
     scope: 'Members',
     category: 'Member Features',
   },
@@ -68,6 +70,20 @@ const meta: FeatureFlagMeta[] = [
     name: 'Streak tracking',
     description: 'Calculate and display workout/activity streaks.',
     scope: 'All Users',
+    category: 'Member Features',
+  },
+  {
+    key: 'enable_challenges',
+    name: 'Challenges',
+    description: 'Enable member challenges and points rewards.',
+    scope: 'Members',
+    category: 'Member Features',
+  },
+  {
+    key: 'enable_leaderboard',
+    name: 'Community leaderboard',
+    description: 'Enable the community points leaderboard and public profiles.',
+    scope: 'Members',
     category: 'Member Features',
   },
   {
@@ -113,6 +129,8 @@ const defaultSnapshot: FeatureFlagsSnapshot = {
   enable_workout_confirmation: { enabled: true, lastModifiedAt: null, lastModifiedBy: null },
   enable_progress_tracking: { enabled: true, lastModifiedAt: null, lastModifiedBy: null },
   enable_streak_tracking: { enabled: true, lastModifiedAt: null, lastModifiedBy: null },
+  enable_challenges: { enabled: true, lastModifiedAt: null, lastModifiedBy: null },
+  enable_leaderboard: { enabled: true, lastModifiedAt: null, lastModifiedBy: null },
   enable_trainer_availability: { enabled: true, lastModifiedAt: null, lastModifiedBy: null },
   enable_session_proposals: { enabled: true, lastModifiedAt: null, lastModifiedBy: null },
   enable_video_sessions: { enabled: false, lastModifiedAt: null, lastModifiedBy: null },

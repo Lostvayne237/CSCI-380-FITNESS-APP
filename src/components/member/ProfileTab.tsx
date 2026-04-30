@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
 import { useAuth } from '../../context/AuthContext';
+import { useFeatureFlag } from '../../context/FeatureFlagsContext';
 import { useMemberData } from '../../context/MemberDataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../lib/supabase';
@@ -12,7 +13,13 @@ export function ProfileTab() {
   const { user, logout } = useAuth();
   const { userProfile, dailyHistory, updateUserProfile } = useMemberData();
   const { colors, mode } = useTheme();
+  const enableMetrics = useFeatureFlag('enable_progress_tracking');
+  const enableStreaks = useFeatureFlag('enable_streak_tracking');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [metricsOpen, setMetricsOpen] = useState(false);
+  const [metricsEditOpen, setMetricsEditOpen] = useState(false);
+  const [heightCmText, setHeightCmText] = useState(userProfile.heightCm ? String(userProfile.heightCm) : '');
+  const [weightKgText, setWeightKgText] = useState(userProfile.weightKg ? String(userProfile.weightKg) : '');
   const [password1, setPassword1] = useState('');
   const [password2, setPassword2] = useState('');
   const [pwError, setPwError] = useState<string | null>(null);
@@ -29,12 +36,25 @@ export function ProfileTab() {
     { name: 'Marathon', earned: false, icon: 'walk' as const },
   ];
 
-  const stats = [
-    { label: 'Total Workouts', value: String(userProfile.totalWorkouts) },
-    { label: 'Streak', value: `${userProfile.streakDays} days` },
-    { label: 'Total Steps', value: String(userProfile.totalSteps) },
-    { label: 'Days Active', value: String(daysActive) },
-  ];
+  const stats = useMemo(() => {
+    const base = [
+      { label: 'Total Workouts', value: String(userProfile.totalWorkouts) },
+      { label: 'Total Steps', value: String(userProfile.totalSteps) },
+      { label: 'Days Active', value: String(daysActive) },
+    ];
+    return enableStreaks ? [{ label: 'Streak', value: `${userProfile.streakDays} days` }, ...base] : base;
+  }, [daysActive, enableStreaks, userProfile.streakDays, userProfile.totalSteps, userProfile.totalWorkouts]);
+
+  const goalPill = useMemo(() => goalBadge(userProfile.fitnessGoal), [userProfile.fitnessGoal]);
+  const bmi = useMemo(() => {
+    const h = userProfile.heightCm ?? null;
+    const w = userProfile.weightKg ?? null;
+    if (!h || !w) return null;
+    const m = h / 100;
+    const v = w / (m * m);
+    return Math.round(v * 10) / 10;
+  }, [userProfile.heightCm, userProfile.weightKg]);
+  const bmiInfo = bmi ? bmiCategory(bmi) : null;
 
   const initial = (userProfile.name || user?.name || '?').charAt(0).toUpperCase();
 
@@ -114,9 +134,37 @@ export function ProfileTab() {
           {userProfile.name ?? 'Member'}
         </Text>
         <Text style={{ color: colors.textMuted, marginTop: 6 }}>{userProfile.email || user?.email || ''}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-          <Ionicons name="ribbon" size={18} color="#ca8a04" />
-          <Text style={{ color: '#a16207', fontWeight: '600' }}>Level 12</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+          {goalPill ? (
+            <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: goalPill.bg }}>
+              <Text style={{ fontWeight: '900', color: goalPill.fg }}>
+                {goalPill.icon} {goalPill.label}
+              </Text>
+            </View>
+          ) : (
+            <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: '#f1f5f9' }}>
+              <Text style={{ fontWeight: '900', color: colors.textMuted }}>Set goal to personalize</Text>
+            </View>
+          )}
+          <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: '#fef9c3' }}>
+            <Text style={{ fontWeight: '900', color: '#854d0e' }}>🏆 {userProfile.points ?? 0} pts</Text>
+          </View>
+          {enableMetrics ? (
+            <Pressable
+              onPress={() => setMetricsOpen(true)}
+              style={({ pressed }) => ({
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 999,
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.border,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={{ fontWeight: '900', color: colors.text }}>My Metrics</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -390,6 +438,152 @@ export function ProfileTab() {
         </View>
       </Modal>
 
+      {enableMetrics ? (
+        <Modal visible={metricsOpen} animationType="slide" onRequestClose={() => setMetricsOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: colors.background, padding: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 20, fontWeight: '900', color: colors.text }}>My Metrics</Text>
+              <Pressable onPress={() => setMetricsOpen(false)} style={{ padding: 8 }}>
+                <Ionicons name="close" size={22} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <View style={{ marginTop: 14, gap: 10 }}>
+              <View style={metricCard(colors)}>
+                <Text style={metricTitle(colors)}>Height</Text>
+                <Text style={metricValue(colors)}>{userProfile.heightCm ? `${userProfile.heightCm} cm` : '—'}</Text>
+              </View>
+              <View style={metricCard(colors)}>
+                <Text style={metricTitle(colors)}>Weight</Text>
+                <Text style={metricValue(colors)}>{userProfile.weightKg ? `${userProfile.weightKg} kg` : '—'}</Text>
+              </View>
+              <View style={metricCard(colors)}>
+                <Text style={metricTitle(colors)}>BMI</Text>
+                <Text style={[metricValue(colors), { color: bmiInfo?.color ?? colors.text }]}>{bmi ?? '—'}</Text>
+                <View style={{ height: 10, borderRadius: 999, backgroundColor: '#e2e8f0', marginTop: 10, overflow: 'hidden' }}>
+                  <View
+                    style={{
+                      width: `${Math.min(100, Math.max(0, ((bmi ?? 0) / 40) * 100))}%`,
+                      height: 10,
+                      backgroundColor: bmiInfo?.color ?? '#94a3b8',
+                    }}
+                  />
+                </View>
+                <Text style={{ marginTop: 8, color: colors.textMuted }}>
+                  {bmi ? `Your BMI is ${bmi} — ${bmiInfo?.label}` : 'Add height and weight to calculate BMI.'}
+                </Text>
+              </View>
+
+              <View style={metricCard(colors)}>
+                <Text style={metricTitle(colors)}>Activity Level</Text>
+                <Text style={metricValue(colors)}>{userProfile.activityLevel ? prettyActivity(userProfile.activityLevel) : '—'}</Text>
+              </View>
+              <View style={metricCard(colors)}>
+                <Text style={metricTitle(colors)}>Fitness Goal</Text>
+                <Text style={metricValue(colors)}>{goalPill ? `${goalPill.icon} ${goalPill.label}` : '—'}</Text>
+              </View>
+              {enableStreaks ? (
+                <View style={metricCard(colors)}>
+                  <Text style={metricTitle(colors)}>Current Streak 🔥</Text>
+                  <Text style={metricValue(colors)}>{userProfile.streakDays ?? 0} days</Text>
+                </View>
+              ) : null}
+              <View style={metricCard(colors)}>
+                <Text style={metricTitle(colors)}>Total Sessions Completed</Text>
+                <Text style={metricValue(colors)}>{userProfile.totalWorkouts ?? 0}</Text>
+              </View>
+              <View style={metricCard(colors)}>
+                <Text style={metricTitle(colors)}>Member Since</Text>
+                <Text style={metricValue(colors)}>{userProfile.memberSince ?? '—'}</Text>
+              </View>
+
+              <Pressable
+                onPress={() => {
+                  setHeightCmText(userProfile.heightCm ? String(userProfile.heightCm) : '');
+                  setWeightKgText(userProfile.weightKg ? String(userProfile.weightKg) : '');
+                  setMetricsEditOpen(true);
+                }}
+                style={({ pressed }) => ({
+                  marginTop: 6,
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  backgroundColor: colors.primary,
+                  alignItems: 'center',
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900' }}>Update Metrics</Text>
+              </Pressable>
+            </View>
+
+            <Modal visible={metricsEditOpen} transparent animationType="fade" onRequestClose={() => setMetricsEditOpen(false)}>
+              <Pressable onPress={() => setMetricsEditOpen(false)} style={{ flex: 1, backgroundColor: colors.overlay, padding: 20, justifyContent: 'center' }}>
+                <Pressable
+                  onPress={() => {}}
+                  style={{ borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 16 }}
+                >
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text }}>Update Metrics</Text>
+                  <Text style={{ color: colors.textMuted, marginTop: 6 }}>Height (cm)</Text>
+                  <TextInput
+                    value={heightCmText}
+                    onChangeText={setHeightCmText}
+                    keyboardType="number-pad"
+                    placeholder="e.g., 175"
+                    placeholderTextColor={colors.textMuted}
+                    style={metricInput(colors)}
+                  />
+                  <Text style={{ color: colors.textMuted, marginTop: 10 }}>Weight (kg)</Text>
+                  <TextInput
+                    value={weightKgText}
+                    onChangeText={setWeightKgText}
+                    keyboardType="number-pad"
+                    placeholder="e.g., 72"
+                    placeholderTextColor={colors.textMuted}
+                    style={metricInput(colors)}
+                  />
+
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                    <Pressable
+                      onPress={() => setMetricsEditOpen(false)}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        paddingVertical: 12,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        alignItems: 'center',
+                        opacity: pressed ? 0.85 : 1,
+                      })}
+                    >
+                      <Text style={{ fontWeight: '900', color: colors.text }}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        const h = Number(heightCmText) || null;
+                        const w = Number(weightKgText) || null;
+                        const bmiNext = h && w ? Math.round((w / ((h / 100) * (h / 100))) * 10) / 10 : null;
+                        updateUserProfile({ heightCm: h, weightKg: w, bmi: bmiNext });
+                        setMetricsEditOpen(false);
+                      }}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        paddingVertical: 12,
+                        borderRadius: 12,
+                        backgroundColor: colors.primary,
+                        alignItems: 'center',
+                        opacity: pressed ? 0.85 : 1,
+                      })}
+                    >
+                      <Text style={{ fontWeight: '900', color: '#fff' }}>Save</Text>
+                    </Pressable>
+                  </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
+          </View>
+        </Modal>
+      ) : null}
+
       <Pressable
         onPress={logout}
         style={{
@@ -405,4 +599,57 @@ export function ProfileTab() {
       </Pressable>
     </View>
   );
+}
+
+function bmiCategory(bmi: number) {
+  if (bmi < 18.5) return { label: 'Underweight', color: '#1d4ed8' };
+  if (bmi < 25) return { label: 'Normal', color: '#16a34a' };
+  if (bmi < 30) return { label: 'Overweight', color: '#ca8a04' };
+  return { label: 'Obese', color: '#dc2626' };
+}
+
+function prettyActivity(a: NonNullable<import('../../context/MemberDataContext').UserProfile['activityLevel']>) {
+  if (a === 'sedentary') return 'Sedentary';
+  if (a === 'light') return 'Lightly active';
+  if (a === 'moderate') return 'Moderately active';
+  if (a === 'very_active') return 'Very active';
+  return 'Athlete';
+}
+
+function goalBadge(goal: import('../../context/MemberDataContext').UserProfile['fitnessGoal']): null | {
+  icon: string;
+  label: string;
+  bg: string;
+  fg: string;
+} {
+  if (!goal) return null;
+  switch (goal) {
+    case 'build_muscle':
+      return { icon: '🏋️', label: 'Build Muscle', bg: '#eff6ff', fg: '#1d4ed8' };
+    case 'lose_weight':
+      return { icon: '🔥', label: 'Lose Weight', bg: '#ffedd5', fg: '#9a3412' };
+    case 'improve_flexibility':
+      return { icon: '🧘', label: 'Flexibility', bg: '#dcfce7', fg: '#166534' };
+    case 'boost_endurance':
+      return { icon: '🏃', label: 'Endurance', bg: '#fef9c3', fg: '#854d0e' };
+    case 'maintain_fitness':
+      return { icon: '⚖️', label: 'Maintain', bg: '#f1f5f9', fg: '#0f172a' };
+    case 'general_fitness':
+      return { icon: '💪', label: 'General', bg: '#f3e8ff', fg: '#7c3aed' };
+    default:
+      return null;
+  }
+}
+
+function metricCard(colors: any) {
+  return { borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 14 } as const;
+}
+function metricTitle(colors: any) {
+  return { fontWeight: '900' as const, color: colors.text } as const;
+}
+function metricValue(colors: any) {
+  return { marginTop: 6, fontWeight: '900' as const, color: colors.text, fontSize: 18 } as const;
+}
+function metricInput(colors: any) {
+  return { marginTop: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, color: colors.text } as const;
 }

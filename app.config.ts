@@ -9,6 +9,7 @@ export default ({ config }: { config: any }) => {
 
   return {
     ...config,
+    plugins: Array.from(new Set([...(config.plugins ?? []), 'expo-font'])),
     extra,
   };
 };

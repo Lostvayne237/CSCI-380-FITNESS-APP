@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AnimatePresence, MotiView } from 'moti';
 
 import type { UserRole } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { motionDuration, usePrefersReducedMotion } from '../../lib/motion';
 import { RoleBadge } from './RoleBadge';
 
 const roleCards: Array<{ role: UserRole; title: string; desc: string; icon: keyof typeof Ionicons.glyphMap }> = [
@@ -28,6 +30,7 @@ export function ChangeRoleModal({
   onConfirm: (nextRole: UserRole) => void;
 }) {
   const { colors } = useTheme();
+  const reducedMotion = usePrefersReducedMotion();
   const [nextRole, setNextRole] = useState<UserRole>(currentRole);
 
   useEffect(() => {
@@ -50,10 +53,34 @@ export function ChangeRoleModal({
   const blocked = !!disabledReason;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'center', padding: 16 }}>
-        <Pressable style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.overlay }} onPress={onClose} />
-        <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 16 }}>
+        <AnimatePresence>
+          {visible ? (
+            <MotiView
+              from={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: 'timing', duration: motionDuration(200, reducedMotion) }}
+              style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
+            >
+              <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={onClose} />
+            </MotiView>
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {visible ? (
+            <MotiView
+              from={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92 }}
+              transition={{
+                type: reducedMotion ? 'timing' : 'spring',
+                duration: motionDuration(250, reducedMotion),
+              }}
+              style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: 16 }}
+            >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text }}>Change Role — {name}</Text>
             <Pressable onPress={onClose} style={{ padding: 6 }} accessibilityLabel="Close change role modal">
@@ -118,13 +145,23 @@ export function ChangeRoleModal({
             </View>
 
             {blocked ? (
-              <View style={{ borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2' }}>
+              <MotiView
+                from={{ opacity: 0, translateY: -10 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: motionDuration(250, reducedMotion) }}
+                style={{ borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fef2f2' }}
+              >
                 <Text style={{ fontWeight: '900', color: '#b91c1c' }}>{disabledReason}</Text>
-              </View>
+              </MotiView>
             ) : warning ? (
-              <View style={{ borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#fed7aa', backgroundColor: '#fff7ed' }}>
+              <MotiView
+                from={{ opacity: 0, translateY: -10 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: motionDuration(250, reducedMotion) }}
+                style={{ borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#fed7aa', backgroundColor: '#fff7ed' }}
+              >
                 <Text style={{ fontWeight: '900', color: '#9a3412' }}>{warning}</Text>
-              </View>
+              </MotiView>
             ) : null}
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
@@ -159,7 +196,9 @@ export function ChangeRoleModal({
               </Pressable>
             </View>
           </View>
-        </View>
+            </MotiView>
+          ) : null}
+        </AnimatePresence>
       </View>
     </Modal>
   );

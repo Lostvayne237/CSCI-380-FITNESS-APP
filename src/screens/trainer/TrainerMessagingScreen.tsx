@@ -21,7 +21,7 @@ export function TrainerMessagingScreen() {
   }, [user?.id]);
 
   const trainerThreads = useMemo(
-    () => threads.filter(t => t.trainerId === trainerId),
+    () => threads.filter(t => t.kind === 'trainer' && t.trainerId === trainerId && !!t.memberId),
     [threads, trainerId],
   );
 
@@ -30,7 +30,7 @@ export function TrainerMessagingScreen() {
     [activeThread, trainerThreads],
   );
   const activeMember = useMemo(
-    () => (activeMeta ? getMemberById(activeMeta.memberId) : null),
+    () => (activeMeta?.memberId ? getMemberById(activeMeta.memberId) : null),
     [activeMeta],
   );
   const messages = useMemo(() => (activeThread ? getThreadMessages(activeThread) : []), [activeThread, getThreadMessages]);
@@ -246,7 +246,7 @@ export function TrainerMessagingScreen() {
             if (!activeMeta) return;
             sendMessage({
               trainerId,
-              memberId: activeMeta.memberId,
+              memberId: activeMeta.memberId!,
               fromRole: 'trainer',
               fromId: trainerId,
               text,

@@ -6,8 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { MemberBottomNav, type MemberTabId } from '../../components/member/MemberBottomNav';
+import { ChallengesTab } from '../../components/member/ChallengesTab';
+import { LeaderboardTab } from '../../components/member/LeaderboardTab';
 import { Dashboard, type DailyActivity, type DailyTracker, type FoodLogListItem, type Workout } from '../../components/member/Dashboard';
 import { MessagesTab } from '../../components/member/MessagesTab';
+import { OnboardingFlow } from '../../components/member/OnboardingFlow';
 import { ProfileTab } from '../../components/member/ProfileTab';
 import { ProgressTab } from '../../components/member/ProgressTab';
 import { WorkoutTracking } from '../../components/member/WorkoutTracking';
@@ -17,6 +20,7 @@ import { useMessaging } from '../../context/MessagingContext';
 import { MemberDataProvider, type DailyHistoryEntry, type UserProfile } from '../../context/MemberDataContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useWorkoutProposals } from '../../context/WorkoutProposalsContext';
+import { useChallenges } from '../../context/ChallengesContext';
 import { getMemberById, getTrainerById } from '../../lib/mockDirectory';
 import type { MemberStackParamList } from '../../navigation/MemberNavigator';
 
@@ -52,7 +56,26 @@ type Action =
   | {
       type: 'updateUserProfile';
       patch: Partial<
-        Pick<UserProfile, 'name' | 'email' | 'avatarUri' | 'age' | 'weight' | 'height' | 'goal' | 'notificationsEnabled'>
+        Pick<
+          UserProfile,
+          | 'name'
+          | 'email'
+          | 'avatarUri'
+          | 'age'
+          | 'weight'
+          | 'height'
+          | 'goal'
+          | 'notificationsEnabled'
+          | 'hasCompletedOnboarding'
+          | 'heightCm'
+          | 'weightKg'
+          | 'bmi'
+          | 'fitnessGoal'
+          | 'activityLevel'
+          | 'points'
+          | 'challengesCompleted'
+          | 'memberSince'
+        >
       >;
     }
   | { type: 'rolloverDay'; dateKey: string };
@@ -65,6 +88,15 @@ const defaultProfile = (args: { name?: string | null; email?: string | null }): 
   weight: null,
   height: null,
   goal: 'maintain',
+  hasCompletedOnboarding: false,
+  heightCm: null,
+  weightKg: null,
+  bmi: null,
+  fitnessGoal: null,
+  activityLevel: null,
+  points: 0,
+  challengesCompleted: 0,
+  memberSince: new Date().toISOString().slice(0, 10),
   totalWorkouts: 0,
   totalSteps: 0,
   streakDays: 0,
@@ -176,8 +208,12 @@ export function MemberHomeScreen({ route, navigation }: Props) {
   const { user } = useAuth();
   const enableMessaging = useFeatureFlag('enable_member_messaging');
   const enableProgress = useFeatureFlag('enable_progress_tracking');
+  const enableChallenges = useFeatureFlag('enable_challenges');
+  const enableLeaderboard = useFeatureFlag('enable_leaderboard');
+  const enableAI = useFeatureFlag('enable_ai_recommendations');
   const { proposals, getProposalsForMember, setProposalStatus } = useWorkoutProposals();
   const { sendMessage } = useMessaging();
+  const { hasIncompleteDaily } = useChallenges();
   const { colors } = useTheme();
 
   const memberId = useMemo(() => {
@@ -196,7 +232,18 @@ export function MemberHomeScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (tab === 'messages' && !enableMessaging) setTab('home');
     if (tab === 'progress' && !enableProgress) setTab('home');
-  }, [enableMessaging, enableProgress, tab]);
+    if (tab === 'challenges' && !enableChallenges) setTab('home');
+    if (tab === 'leaderboard' && !enableLeaderboard) setTab('home');
+  }, [enableChallenges, enableLeaderboard, enableMessaging, enableProgress, tab]);
+  useEffect(() => {
+    // AI is a dashboard section; nothing to navigate away from.
+    // This effect exists to keep the flag dependency explicit.
+    void enableAI;
+  }, [enableAI]);
+
+  const completeOnboarding = (patch: Partial<UserProfile>) => {
+    dispatch({ type: 'updateUserProfile', patch });
+  };
 
   const [state, dispatch] = useReducer(reducer, {
     workouts: [],
@@ -207,23 +254,6 @@ export function MemberHomeScreen({ route, navigation }: Props) {
   });
 
   const [savedRecIds, setSavedRecIds] = useState<string[]>([]);
-
-  // Mock backend data so UI stays functional without Supabase.
-  const caloriesGoal = 2000;
-  const caloriesToday = 1240;
-  const recentFood: FoodLogListItem[] = [
-    { id: 1, foodName: 'Greek yogurt + berries', calories: 220, loggedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-    { id: 2, foodName: 'Chicken salad wrap', calories: 540, loggedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() },
-    { id: 3, foodName: 'Iced latte', calories: 180, loggedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString() },
-  ];
-
-  const dateKey = todayKey();
-  useEffect(() => {
-    // If app stays open past midnight, reset daily tracker automatically.
-    if (state.dailyTracker.date !== dateKey) {
-      dispatch({ type: 'rolloverDay', dateKey });
-    }
-  }, [dateKey, state.dailyTracker.date]);
 
   useEffect(() => {
     let mounted = true;
@@ -242,6 +272,107 @@ export function MemberHomeScreen({ route, navigation }: Props) {
   useEffect(() => {
     AsyncStorage.setItem(STORAGE_SAVED_RECS, JSON.stringify(savedRecIds)).catch(() => {});
   }, [savedRecIds]);
+
+  const [recSeed, setRecSeed] = useState(0);
+
+  const aiRecommendations = useMemo(() => {
+    if (!enableAI) return [];
+    const goal = state.userProfile.fitnessGoal;
+    const activity = state.userProfile.activityLevel;
+    const bmi = state.userProfile.bmi;
+    if (!goal) return [];
+
+    const difficulty: 'Beginner' | 'Intermediate' | 'Advanced' =
+      activity === 'sedentary' || activity === 'light'
+        ? 'Beginner'
+        : activity === 'moderate'
+          ? 'Intermediate'
+          : 'Advanced';
+
+    const library: Array<{
+      id: string;
+      title: string;
+      category: 'Strength' | 'Cardio' | 'Flexibility' | 'Endurance' | 'Mixed';
+      muscleGroups: string[];
+      durationMinutes: number;
+      tags: Array<NonNullable<UserProfile['fitnessGoal']>>;
+    }> = [
+      { id: 'lib-1', title: 'Hypertrophy: Upper Body', category: 'Strength', muscleGroups: ['Chest', 'Back', 'Arms'], durationMinutes: 45, tags: ['build_muscle'] },
+      { id: 'lib-2', title: 'Compound Lift Strength', category: 'Strength', muscleGroups: ['Legs', 'Back', 'Core'], durationMinutes: 50, tags: ['build_muscle'] },
+      { id: 'lib-3', title: 'HIIT Fat Burner', category: 'Cardio', muscleGroups: ['Full Body', 'Cardio'], durationMinutes: 30, tags: ['lose_weight', 'general_fitness'] },
+      { id: 'lib-4', title: 'Cardio Circuit', category: 'Cardio', muscleGroups: ['Cardio', 'Core'], durationMinutes: 35, tags: ['lose_weight', 'maintain_fitness', 'general_fitness'] },
+      { id: 'lib-5', title: 'Mobility + Stretch Flow', category: 'Flexibility', muscleGroups: ['Mobility', 'Hips', 'Back'], durationMinutes: 25, tags: ['improve_flexibility', 'general_fitness'] },
+      { id: 'lib-6', title: 'Yoga Recovery', category: 'Flexibility', muscleGroups: ['Flexibility', 'Core'], durationMinutes: 30, tags: ['improve_flexibility', 'maintain_fitness'] },
+      { id: 'lib-7', title: 'Endurance Intervals', category: 'Endurance', muscleGroups: ['Cardio', 'Legs'], durationMinutes: 40, tags: ['boost_endurance'] },
+      { id: 'lib-8', title: 'Zone 2 Endurance', category: 'Endurance', muscleGroups: ['Cardio', 'Endurance'], durationMinutes: 45, tags: ['boost_endurance', 'maintain_fitness'] },
+      { id: 'lib-9', title: 'Balanced Full Body', category: 'Mixed', muscleGroups: ['Full Body'], durationMinutes: 40, tags: ['maintain_fitness', 'general_fitness'] },
+      { id: 'lib-10', title: 'Total Body Conditioning', category: 'Mixed', muscleGroups: ['Full Body', 'Cardio'], durationMinutes: 35, tags: ['general_fitness', 'lose_weight'] },
+    ];
+
+    const why = (g: NonNullable<UserProfile['fitnessGoal']>) => {
+      switch (g) {
+        case 'build_muscle':
+          return 'Based on your goal: Build Muscle';
+        case 'lose_weight':
+          return 'Based on your goal: Lose Weight';
+        case 'improve_flexibility':
+          return 'Based on your goal: Improve Flexibility';
+        case 'boost_endurance':
+          return 'Based on your goal: Boost Endurance';
+        case 'maintain_fitness':
+          return 'Based on your goal: Maintain Fitness';
+        case 'general_fitness':
+          return 'Based on your goal: General Fitness';
+        default:
+          return 'Personalized suggestion';
+      }
+    };
+
+    const primary = library.filter(w => w.tags.includes(goal));
+    const bonus = bmi && bmi >= 25 ? library.filter(w => w.category === 'Cardio').slice(0, 2) : [];
+    const merged = [...primary, ...bonus];
+
+    const shuffled = merged
+      .map((x, idx) => ({ x, k: (idx * 997 + recSeed * 7919) % 1000 }))
+      .sort((a, b) => a.k - b.k)
+      .map(r => r.x);
+
+    return shuffled.slice(0, 6).map(w => ({
+      id: w.id,
+      title: w.title,
+      category: w.category,
+      difficulty,
+      durationMinutes: w.durationMinutes,
+      muscleGroups: w.muscleGroups,
+      saved: savedRecIds.includes(w.id),
+      why: why(goal),
+    }));
+  }, [enableAI, recSeed, savedRecIds, state.userProfile.activityLevel, state.userProfile.bmi, state.userProfile.fitnessGoal]);
+
+  const toggleSaveRecommendation = (id: string) => {
+    setSavedRecIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [id, ...prev]));
+  };
+
+  const startRecommendation = (_id: string) => {
+    setTab('workouts');
+  };
+
+  // Mock backend data so UI stays functional without Supabase.
+  const caloriesGoal = 2000;
+  const caloriesToday = 1240;
+  const recentFood: FoodLogListItem[] = [
+    { id: 1, foodName: 'Greek yogurt + berries', calories: 220, loggedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
+    { id: 2, foodName: 'Chicken salad wrap', calories: 540, loggedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString() },
+    { id: 3, foodName: 'Iced latte', calories: 180, loggedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString() },
+  ];
+
+  const dateKey = todayKey();
+  useEffect(() => {
+    // If app stays open past midnight, reset daily tracker automatically.
+    if (state.dailyTracker.date !== dateKey) {
+      dispatch({ type: 'rolloverDay', dateKey });
+    }
+  }, [dateKey, state.dailyTracker.date]);
 
   useEffect(() => {
     let mounted = true;
@@ -337,90 +468,6 @@ export function MemberHomeScreen({ route, navigation }: Props) {
     if (p) notifyTrainer(`I declined "${p.workoutName}" for ${new Date(p.scheduledAt).toLocaleString()}.`);
   };
 
-  const aiRecommendations = useMemo(() => {
-    const goal = state.userProfile.goal;
-    const workoutCount = state.workouts.length;
-    const activityLevel = workoutCount >= 12 ? 'high' : workoutCount >= 4 ? 'medium' : 'low';
-
-    const templates: Array<{
-      id: string;
-      title: string;
-      difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
-      durationMinutes: number;
-      muscleGroups: string[];
-      tags: Array<UserProfile['goal']>;
-    }> = [
-      {
-        id: 'rec-1',
-        title: 'Full-Body Strength Circuit',
-        difficulty: activityLevel === 'high' ? ('Advanced' as const) : ('Intermediate' as const),
-        durationMinutes: 35,
-        muscleGroups: ['Legs', 'Back', 'Core'],
-        tags: ['build muscle', 'maintain'],
-      },
-      {
-        id: 'rec-2',
-        title: 'Low-Impact Cardio + Core',
-        difficulty: ('Beginner' as const),
-        durationMinutes: 25,
-        muscleGroups: ['Core', 'Cardio'],
-        tags: ['lose fat', 'maintain'],
-      },
-      {
-        id: 'rec-3',
-        title: 'Upper Body Push/Pull',
-        difficulty: ('Intermediate' as const),
-        durationMinutes: 40,
-        muscleGroups: ['Chest', 'Shoulders', 'Back', 'Arms'],
-        tags: ['build muscle'],
-      },
-      {
-        id: 'rec-4',
-        title: 'Mobility + Recovery Flow',
-        difficulty: ('Beginner' as const),
-        durationMinutes: 20,
-        muscleGroups: ['Hips', 'Hamstrings', 'Shoulders'],
-        tags: ['maintain', 'lose fat', 'build muscle'],
-      },
-      {
-        id: 'rec-5',
-        title: 'Interval Run (Treadmill/Outdoor)',
-        difficulty: activityLevel === 'low' ? ('Beginner' as const) : ('Intermediate' as const),
-        durationMinutes: 30,
-        muscleGroups: ['Cardio', 'Legs'],
-        tags: ['lose fat', 'maintain'],
-      },
-    ];
-
-    const scored = templates
-      .map(t => {
-        let score = 0;
-        if (t.tags.includes(goal)) score += 5;
-        if (activityLevel === 'low' && t.difficulty === 'Beginner') score += 2;
-        if (activityLevel === 'high' && t.difficulty === 'Advanced') score += 2;
-        if (dailyActivity.totalWorkouts === 0 && t.title.toLowerCase().includes('recovery')) score += 1;
-        return { ...t, score };
-      })
-      .sort((a, b) => b.score - a.score);
-
-    return scored.map(s => ({
-      id: s.id,
-      title: s.title,
-      difficulty: s.difficulty,
-      durationMinutes: s.durationMinutes,
-      muscleGroups: [...s.muscleGroups],
-      saved: savedRecIds.includes(s.id),
-    }));
-  }, [dailyActivity.totalWorkouts, savedRecIds, state.userProfile.goal, state.workouts.length]);
-
-  const toggleSaveRecommendation = (id: string) => {
-    setSavedRecIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [id, ...prev]));
-  };
-
-  const startRecommendation = (_id: string) => {
-    setTab('workouts');
-  };
-
   const render = () => {
     if (quickLog) {
       return (
@@ -436,7 +483,7 @@ export function MemberHomeScreen({ route, navigation }: Props) {
           <Dashboard
             onQuickLog={() => setQuickLog(true)}
             onOpenDailyTracker={() => setDailyTrackerOpen(true)}
-            userName={user?.name}
+            userName={state.userProfile.name}
             caloriesToday={caloriesToday}
             caloriesGoal={caloriesGoal}
             recentFood={recentFood}
@@ -453,6 +500,8 @@ export function MemberHomeScreen({ route, navigation }: Props) {
             aiRecommendations={aiRecommendations}
             onStartRecommendation={startRecommendation}
             onToggleSaveRecommendation={toggleSaveRecommendation}
+            onRefreshRecommendations={() => setRecSeed(s => s + 1)}
+            onPromptSetGoal={() => setTab('profile')}
             onOpenTrainerProfile={tid => navigation.navigate('TrainerProfile', { trainerId: tid, memberId })}
           />
         );
@@ -476,6 +525,10 @@ export function MemberHomeScreen({ route, navigation }: Props) {
         return <ProgressTab />;
       case 'profile':
         return <ProfileTab />;
+      case 'challenges':
+        return <ChallengesTab userId={memberId} />;
+      case 'leaderboard':
+        return <LeaderboardTab meId={memberId} />;
       default:
         return (
           <Dashboard
@@ -492,6 +545,8 @@ export function MemberHomeScreen({ route, navigation }: Props) {
             aiRecommendations={aiRecommendations}
             onStartRecommendation={startRecommendation}
             onToggleSaveRecommendation={toggleSaveRecommendation}
+            onRefreshRecommendations={() => setRecSeed(s => s + 1)}
+            onPromptSetGoal={() => setTab('profile')}
             onOpenTrainerProfile={tid => navigation.navigate('TrainerProfile', { trainerId: tid, memberId })}
           />
         );
@@ -514,17 +569,33 @@ export function MemberHomeScreen({ route, navigation }: Props) {
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
         <View style={{ flex: 1 }}>
-          {tab === 'messages' ? (
-            <View style={{ flex: 1, padding: 20, paddingBottom: 32 }}>{render()}</View>
+          {!state.userProfile.hasCompletedOnboarding ? (
+            <OnboardingFlow
+              initial={{
+                name: state.userProfile.name,
+                heightCm: state.userProfile.heightCm,
+                weightKg: state.userProfile.weightKg,
+                fitnessGoal: state.userProfile.fitnessGoal,
+                activityLevel: state.userProfile.activityLevel,
+              }}
+              onSkip={() => completeOnboarding({ hasCompletedOnboarding: true })}
+              onComplete={patch => completeOnboarding(patch)}
+            />
           ) : (
-            <ScrollView
-              contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
-              keyboardShouldPersistTaps="handled"
-            >
-              {render()}
-            </ScrollView>
+            <>
+              {tab === 'messages' ? (
+                <View style={{ flex: 1, padding: 20, paddingBottom: 32 }}>{render()}</View>
+              ) : (
+                <ScrollView
+                  contentContainerStyle={{ padding: 20, paddingBottom: 32 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {render()}
+                </ScrollView>
+              )}
+              {!quickLog && <MemberBottomNav active={tab} onChange={setTab} showChallengesDot={hasIncompleteDaily(memberId)} />}
+            </>
           )}
-          {!quickLog && <MemberBottomNav active={tab} onChange={setTab} />}
         </View>
 
         <Modal
